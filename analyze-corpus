@@ -242,14 +242,25 @@ def should_recheck(
     if record is None:
         return True, "uncached"
 
-    if (
-        requested_domain
-        and domain_matches(
+    #
+    # A targeted domain run must not retry unrelated
+    # unresolved/error URLs. It uses their cached state
+    # for the full-corpus summary.
+    #
+    if requested_domain:
+        if domain_matches(
             url,
             requested_domain,
-        )
-    ):
-        return True, "domain"
+        ):
+            return True, "domain"
+
+        if (
+            record.get("status") == "resolved"
+            and url in probes
+        ):
+            return True, "regression"
+
+        return False, "target-cache"
 
     status = record.get("status")
 
@@ -427,11 +438,21 @@ def main() -> None:
                 and new_record.get("status") != "resolved"
             ):
                 print(
-                    "WARNING: regression probe changed "
-                    f"from resolved to "
-                    f"{new_record.get('status')}: {url}",
+                    "WARNING: regression probe failed; "
+                    "preserving last known-good result: "
+                    f"{url} "
+                    f"({new_record.get('status')}: "
+                    f"{new_record.get('reason')})",
                     file=sys.stderr,
                 )
+
+                #
+                # A regression probe is observational.
+                # Do not destroy a known-good cache entry
+                # because of a transient remote failure.
+                #
+                records[url] = old_record
+                continue
 
             cached_urls[url] = new_record
             records[url] = new_record
