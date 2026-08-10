@@ -111,7 +111,7 @@ def render_home() -> str:
 
         <nav class="minimal-links" aria-label="Bilgi">
             <a href="/about">Hakkında</a>
-            <a href="https://github.com/humit/goster.me/issues" rel="noopener noreferrer" target="_blank">İletişim</a>
+            <a href="https://github.com/humit/goster.me/issues/new" rel="noopener noreferrer" target="_blank">İletişim</a>
         </nav>
     </section>
 </main>
