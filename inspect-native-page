@@ -1,0 +1,264 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import re
+import sys
+from collections import Counter
+from html.parser import HTMLParser
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
+
+
+USER_AGENT = "Mozilla/5.0 Childsafe/0.3"
+MAX_BYTES = 3 * 1024 * 1024
+
+KEYWORDS = (
+    "quiz",
+    "game",
+    "question",
+    "answer",
+    "score",
+    "puan",
+    "life",
+    "lives",
+    "can",
+    "frog",
+    "train",
+    "hece",
+    "toplama",
+    "exercise",
+    "activity",
+    "app",
+    "start",
+    "result",
+)
+
+
+class Parser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.title_parts = []
+        self.in_title = False
+
+        self.ids = Counter()
+        self.classes = Counter()
+
+        self.scripts = []
+        self.stylesheets = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        tag = tag.lower()
+
+        if tag == "title":
+            self.in_title = True
+
+        if "id" in attrs:
+            self.ids[attrs["id"]] += 1
+
+        if "class" in attrs:
+            for cls in attrs["class"].split():
+                self.classes[cls] += 1
+
+        if tag == "script":
+            src = attrs.get("src")
+            if src:
+                self.scripts.append(src)
+
+        if tag == "link":
+            href = attrs.get("href", "")
+            rel = attrs.get("rel", "")
+
+            if "stylesheet" in rel.lower():
+                self.stylesheets.append(href)
+
+    def handle_endtag(self, tag):
+        if tag.lower() == "title":
+            self.in_title = False
+
+    def handle_data(self, data):
+        if self.in_title:
+            value = data.strip()
+            if value:
+                self.title_parts.append(value)
+
+    @property
+    def title(self):
+        return " ".join(self.title_parts).strip()
+
+
+def fetch(url: str) -> str:
+    parsed = urlparse(url)
+
+    if parsed.scheme not in {"http", "https"}:
+        raise SystemExit("ERROR: only HTTP/HTTPS URLs supported")
+
+    req = Request(
+        url,
+        headers={
+            "User-Agent": USER_AGENT,
+            "Accept": "text/html,application/xhtml+xml",
+        },
+    )
+
+    with urlopen(req, timeout=20) as response:
+        body = response.read(MAX_BYTES + 1)
+
+        if len(body) > MAX_BYTES:
+            raise SystemExit("ERROR: page too large")
+
+        return body.decode("utf-8", errors="replace")
+
+
+def interesting(value: str) -> bool:
+    lower = value.lower()
+
+    return any(
+        keyword in lower
+        for keyword in KEYWORDS
+    )
+
+
+def score(value: str) -> int:
+    lower = value.lower()
+    total = 0
+
+    for keyword in KEYWORDS:
+        if keyword in lower:
+            total += 10
+
+    if len(value) <= 40:
+        total += 2
+
+    return total
+
+
+def main():
+    if len(sys.argv) != 2:
+        raise SystemExit(
+            f"Usage: {sys.argv[0]} URL"
+        )
+
+    url = sys.argv[1]
+    html = fetch(url)
+
+    parser = Parser()
+    parser.feed(html)
+
+    print("===== PAGE =====")
+    print("URL   :", url)
+    print("Title :", parser.title)
+    print("Bytes :", len(html))
+
+    candidates = []
+
+    for value in parser.ids:
+        if interesting(value):
+            candidates.append(
+                (score(value), "id", value)
+            )
+
+    for value in parser.classes:
+        if interesting(value):
+            candidates.append(
+                (score(value), "class", value)
+            )
+
+    candidates.sort(
+        key=lambda item: (-item[0], item[2])
+    )
+
+    print()
+    print("===== SELECTOR CANDIDATES =====")
+
+    if not candidates:
+        print("(none)")
+    else:
+        for points, kind, value in candidates[:80]:
+            prefix = "#" if kind == "id" else "."
+            print(
+                f"{points:3}  {prefix}{value}"
+            )
+
+    print()
+    print("===== SCRIPTS =====")
+
+    for src in parser.scripts:
+        if interesting(src) or "blogspot" not in src:
+            print(src)
+
+    print()
+    print("===== STYLESHEETS =====")
+
+    for href in parser.stylesheets:
+        print(href)
+
+    print()
+    print("===== INLINE JS DOM REFERENCES =====")
+
+    patterns = [
+        r'getElementById\(\s*["\']([^"\']+)["\']',
+        r'querySelector\(\s*["\']([^"\']+)["\']',
+        r'querySelectorAll\(\s*["\']([^"\']+)["\']',
+    ]
+
+    refs = Counter()
+
+    for pattern in patterns:
+        for match in re.findall(
+            pattern,
+            html,
+            flags=re.I,
+        ):
+            refs[match] += 1
+
+    for ref, count in refs.most_common(100):
+        marker = ""
+
+        if interesting(ref):
+            marker = "  <== likely"
+
+        print(
+            f"{count:3}  {ref}{marker}"
+        )
+
+    print()
+    print("===== GAME/QUIZ TEXT HINTS =====")
+
+    for line_no, line in enumerate(
+        html.splitlines(),
+        start=1,
+    ):
+        lower = line.lower()
+
+        if any(
+            keyword in lower
+            for keyword in (
+                "score",
+                "puan",
+                "question",
+                "answer",
+                "correct",
+                "wrong",
+                "frog",
+                "train",
+                "hece",
+                "toplama",
+            )
+        ):
+            cleaned = re.sub(
+                r"\s+",
+                " ",
+                line.strip(),
+            )
+
+            if cleaned:
+                print(
+                    f"{line_no:5}: "
+                    f"{cleaned[:260]}"
+                )
+
+
+if __name__ == "__main__":
+    main()

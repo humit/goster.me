@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import re
+import sys
+from collections import Counter, defaultdict
+from pathlib import Path
+from urllib.parse import urlparse
+
+from adapters import (
+    AdapterError,
+    UnsupportedURL,
+    ResolveError,
+    resolve_url,
+    matching_adapters,
+)
+
+
+URL_RE = re.compile(r'https?://[^\s<>"\]]+')
+
+
+def clean_url(url: str) -> str:
+    return url.rstrip(
+        '.,;:!?)]}>\'"'
+    )
+
+
+def host(url: str) -> str:
+    return (
+        urlparse(url).hostname or ""
+    ).lower()
+
+
+def extract_urls(path: Path) -> list[str]:
+    text = path.read_text(
+        encoding="utf-8",
+        errors="replace",
+    )
+
+    return [
+        clean_url(m.group(0))
+        for m in URL_RE.finditer(text)
+    ]
+
+
+def main():
+    if len(sys.argv) < 2:
+        raise SystemExit(
+            f"Usage: {sys.argv[0]} CHAT.txt [CHAT2.txt ...]"
+        )
+
+    urls = []
+
+    for arg in sys.argv[1:]:
+        path = Path(arg)
+
+        found = extract_urls(path)
+
+        print(
+            f"{path}: {len(found)} URLs",
+            file=sys.stderr,
+        )
+
+        urls.extend(found)
+
+    unique_urls = list(dict.fromkeys(urls))
+
+    status = Counter()
+    providers = Counter()
+    adapters = Counter()
+    hosts = Counter()
+    domain_status = defaultdict(Counter)
+
+    examples = defaultdict(list)
+
+    for index, url in enumerate(unique_urls, 1):
+        domain = host(url)
+        hosts[domain] += 1
+
+        print(
+            f"[{index}/{len(unique_urls)}] {domain}",
+            file=sys.stderr,
+        )
+
+        candidates = matching_adapters(url)
+
+        try:
+            result = resolve_url(url)
+
+        except UnsupportedURL as exc:
+            if candidates:
+                category = "known-unresolved"
+            else:
+                category = "unsupported"
+
+            status[category] += 1
+            domain_status[domain][category] += 1
+
+            if len(examples[(category, domain)]) < 5:
+                examples[(category, domain)].append(
+                    (url, str(exc))
+                )
+
+            continue
+
+        except ResolveError as exc:
+            status["error"] += 1
+            domain_status[domain]["error"] += 1
+
+            if len(examples[("error", domain)]) < 5:
+                examples[("error", domain)].append(
+                    (url, str(exc))
+                )
+
+            continue
+
+        except AdapterError as exc:
+            status["error"] += 1
+            domain_status[domain]["error"] += 1
+
+            if len(examples[("error", domain)]) < 5:
+                examples[("error", domain)].append(
+                    (url, str(exc))
+                )
+
+            continue
+
+        status["resolved"] += 1
+        domain_status[domain]["resolved"] += 1
+        providers[result.provider] += 1
+
+        if result.adapter:
+            adapters[result.adapter] += 1
+
+    print()
+    print("===== SUMMARY =====")
+    print(f"URLs total        : {len(urls)}")
+    print(f"URLs unique       : {len(unique_urls)}")
+
+    for key in (
+        "resolved",
+        "known-unresolved",
+        "unsupported",
+        "error",
+    ):
+        print(
+            f"{key:18}: {status[key]}"
+        )
+
+    print()
+    print("===== DOMAIN STATUS =====")
+    print(
+        f"{'DOMAIN':38} "
+        f"{'TOTAL':>5} "
+        f"{'OK':>5} "
+        f"{'KNOWN':>5} "
+        f"{'UNSUP':>5} "
+        f"{'ERR':>5}"
+    )
+
+    for domain, total in hosts.most_common():
+        ds = domain_status[domain]
+
+        print(
+            f"{domain[:38]:38} "
+            f"{total:5} "
+            f"{ds['resolved']:5} "
+            f"{ds['known-unresolved']:5} "
+            f"{ds['unsupported']:5} "
+            f"{ds['error']:5}"
+        )
+
+    print()
+    print("===== RESOLVED PROVIDERS =====")
+
+    for name, count in providers.most_common():
+        print(f"{count:5}  {name}")
+
+    print()
+    print("===== RESOLVED ADAPTERS =====")
+
+    for name, count in adapters.most_common():
+        print(f"{count:5}  {name}")
+
+    print()
+    print("===== TOP DOMAINS =====")
+
+    for name, count in hosts.most_common(30):
+        print(f"{count:5}  {name}")
+
+    print()
+    print("===== KNOWN BUT UNRESOLVED =====")
+
+    unresolved_domains = Counter()
+
+    for (category, domain), values in examples.items():
+        if category == "known-unresolved":
+            unresolved_domains[domain] = sum(
+                1
+                for url in unique_urls
+                if host(url) == domain
+                and matching_adapters(url)
+            )
+
+    for domain, _ in unresolved_domains.most_common():
+        print()
+        print(f"--- {domain} ---")
+
+        for url, reason in examples[
+            ("known-unresolved", domain)
+        ]:
+            print(url)
+            print(f"  {reason}")
+
+    print()
+    print("===== UNSUPPORTED EXAMPLES =====")
+
+    unsupported_domains = Counter()
+
+    for (category, domain), values in examples.items():
+        if category == "unsupported":
+            unsupported_domains[domain] += len(values)
+
+    for domain, _ in unsupported_domains.most_common(20):
+        print()
+        print(f"--- {domain} ---")
+
+        for url, reason in examples[
+            ("unsupported", domain)
+        ]:
+            print(url)
+
+
+if __name__ == "__main__":
+    main()

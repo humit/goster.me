@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Local runtime/cache
+*.log
+*.pid
+analysis-cache.json
+.cache/
+
+# Backups
+*.bak
+*.bak-*
+*~
+
+# Temporary analysis output
+tmp/
+*.tmp
+
+# Credentials / environment
+.env
+.env.*
+!.env.example

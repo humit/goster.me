@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+
+import json
+import sys
+
+from adapters import (
+    AdapterError,
+    matching_adapters,
+    resolve_url,
+)
+
+
+if len(sys.argv) != 2:
+    raise SystemExit(
+        f"Usage: {sys.argv[0]} URL"
+    )
+
+url = sys.argv[1]
+
+try:
+    print(
+        "Candidates:",
+        ", ".join(
+            matching_adapters(url)
+        ) or "(none)",
+    )
+
+    result = resolve_url(url)
+
+except AdapterError as exc:
+    print(
+        f"ERROR: {exc}",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+
+print(
+    json.dumps(
+        result.to_dict(),
+        indent=2,
+        ensure_ascii=False,
+    )
+)

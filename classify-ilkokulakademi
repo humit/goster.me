@@ -1,0 +1,283 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import re
+import sys
+from html.parser import HTMLParser
+from urllib.parse import urljoin, urlparse
+from urllib.request import Request, urlopen
+
+
+USER_AGENT = "Mozilla/5.0 Childsafe/0.4"
+MAX_BYTES = 4 * 1024 * 1024
+
+
+class PageParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.title_parts = []
+        self.in_title = False
+        self.ids = set()
+        self.iframes = []
+        self.links = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        tag = tag.lower()
+
+        if tag == "title":
+            self.in_title = True
+
+        element_id = attrs.get("id")
+        if element_id:
+            self.ids.add(element_id)
+
+        if tag == "iframe":
+            src = (
+                attrs.get("src")
+                or attrs.get("data-src")
+                or attrs.get("data-lazy-src")
+            )
+            if src:
+                self.iframes.append(src)
+
+        if tag == "a":
+            href = attrs.get("href")
+            if href:
+                self.links.append(href)
+
+    def handle_endtag(self, tag):
+        if tag.lower() == "title":
+            self.in_title = False
+
+    def handle_data(self, data):
+        if self.in_title:
+            value = data.strip()
+            if value:
+                self.title_parts.append(value)
+
+    @property
+    def title(self):
+        return " ".join(self.title_parts).strip()
+
+
+def hostname(url):
+    return (urlparse(url).hostname or "").lower()
+
+
+def fetch(url):
+    req = Request(
+        url,
+        headers={
+            "User-Agent": USER_AGENT,
+            "Accept": "text/html,application/xhtml+xml",
+        },
+    )
+
+    with urlopen(req, timeout=20) as r:
+        body = r.read(MAX_BYTES + 1)
+
+        if len(body) > MAX_BYTES:
+            raise RuntimeError("page too large")
+
+        return r.geturl(), body.decode(
+            "utf-8",
+            errors="replace",
+        )
+
+
+def classify(url):
+    final_url, html = fetch(url)
+
+    parser = PageParser()
+    parser.feed(html)
+
+    iframes = [
+        urljoin(final_url, src)
+        for src in parser.iframes
+    ]
+
+    links = [
+        urljoin(final_url, href)
+        for href in parser.links
+    ]
+
+    # 1. Wordwall
+    for iframe in iframes:
+        if (
+            hostname(iframe) in {
+                "wordwall.net",
+                "www.wordwall.net",
+            }
+            and "/embed/" in urlparse(iframe).path
+        ):
+            return (
+                "wordwall",
+                iframe,
+                parser.title,
+            )
+
+    # 2. External exercise iframe
+    for iframe in iframes:
+        host = hostname(iframe)
+
+        if (
+            host
+            and host not in {
+                "ilkokulakademi.com",
+                "www.ilkokulakademi.com",
+                "www.youtube.com",
+                "youtube.com",
+            }
+        ):
+            return (
+                "external-iframe",
+                iframe,
+                parser.title,
+            )
+
+    ids = parser.ids
+
+    # 3. Known native-game fingerprints
+    native_sets = [
+        {
+            "game-container",
+            "quiz-box",
+            "question-text",
+            "options-container",
+        },
+        {
+            "game-container",
+            "question-box",
+            "current-question",
+            "train-area",
+        },
+    ]
+
+    if any(
+        required.issubset(ids)
+        for required in native_sets
+    ):
+        return (
+            "native-game",
+            "#game-container",
+            parser.title,
+        )
+
+    # 4. Broader native-game signal.
+    #
+    # We don't auto-resolve this class yet. It is only for discovery.
+    gameish_ids = sorted(
+        value
+        for value in ids
+        if re.search(
+            r"(game|quiz|question|answer|score|lives|result|option)",
+            value,
+            flags=re.I,
+        )
+    )
+
+    if len(gameish_ids) >= 3:
+        return (
+            "native-candidate",
+            ",".join(gameish_ids),
+            parser.title,
+        )
+
+    # 5. Documents
+    document_links = []
+
+    for link in links:
+        lower = link.lower()
+        host = hostname(link)
+
+        if (
+            lower.endswith(".pdf")
+            or "drive.google.com/file/" in lower
+            or host in {
+                "acrobat.adobe.com",
+                "drive.google.com",
+                "docs.google.com",
+            }
+        ):
+            document_links.append(link)
+
+    if document_links:
+        return (
+            "document",
+            document_links[0],
+            parser.title,
+        )
+
+    return (
+        "unknown",
+        "",
+        parser.title,
+    )
+
+
+def extract_urls(path):
+    text = open(
+        path,
+        encoding="utf-8",
+        errors="replace",
+    ).read()
+
+    urls = re.findall(
+        r'https?://(?:www\.)?ilkokulakademi\.com/[^\s<>"\']+',
+        text,
+    )
+
+    cleaned = []
+
+    for url in urls:
+        url = url.rstrip(".,;:!?)")
+        cleaned.append(url)
+
+    return sorted(set(cleaned))
+
+
+def main():
+    if len(sys.argv) != 2:
+        raise SystemExit(
+            f"Usage: {sys.argv[0]} WHATSAPP_EXPORT"
+        )
+
+    urls = extract_urls(sys.argv[1])
+
+    counts = {}
+
+    for index, url in enumerate(urls, 1):
+        try:
+            kind, detail, title = classify(url)
+        except Exception as exc:
+            kind = "error"
+            detail = f"{type(exc).__name__}: {exc}"
+            title = ""
+
+        counts[kind] = counts.get(kind, 0) + 1
+
+        print(
+            f"{index:02}/{len(urls):02} "
+            f"{kind:18} {url}"
+        )
+
+        if title:
+            print(f"    title : {title}")
+
+        if detail:
+            print(f"    detail: {detail}")
+
+    print()
+    print("===== SUMMARY =====")
+
+    for kind, count in sorted(
+        counts.items(),
+        key=lambda item: (-item[1], item[0]),
+    ):
+        print(f"{count:3}  {kind}")
+
+
+if __name__ == "__main__":
+    main()
