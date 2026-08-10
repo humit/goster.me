@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import html
+import io
 import os
 import random
 import re
-import time
 
 from http.server import ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import urlparse
+
+import segno
 
 import public_app as legacy
 
@@ -24,6 +27,8 @@ from shortlinks import (
 HOST = os.environ.get("GOSTER_HOST", legacy.HOST)
 PORT = int(os.environ.get("GOSTER_PORT", str(legacy.PORT)))
 STORE = ShortLinkStore()
+ROOT = Path(__file__).resolve().parent
+STATIC_DIR = ROOT / "static"
 
 SLOGANS = (
     "Bana reklam goster.me.",
@@ -52,32 +57,55 @@ def get_item(item_id: str):
 
 
 # Existing renderer functions resolve these names from public_app's module
-# globals, so replacing them lets the tested renderer gain persistence without
-# copying or forking adapter/rendering logic.
+# globals. Replacing them lets the mature renderer gain persistence without
+# forking all adapter/rendering logic.
 legacy.save_item = save_item
 legacy.get_item = get_item
 
 
-def public_url(code: str) -> str:
-    return f"/{escape(code)}"
+LEGACY_DOCUMENT = legacy.document
+
+
+def product_document(title: str, body: str) -> str:
+    """Shared HTML shell.
+
+    Presentation lives in static/product.css and behavior in static/product.js
+    so contributors can work on UI without editing the Python renderer.
+    """
+    return f"""<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<title>{escape(title)}</title>
+{legacy.BASE_STYLE}
+<link rel="stylesheet" href="/static/product.css">
+</head>
+<body>
+{body}
+<script src="/static/product.js" defer></script>
+</body>
+</html>
+"""
+
+
+legacy.document = product_document
 
 
 def render_home() -> str:
     slogan = random.choice(SLOGANS)
 
-    return legacy.document(
+    return product_document(
         "goster.me — Gerekmeyeni gösterme",
         f"""
-<main class="home product-home">
+<main class="product-home">
     <header class="product-header">
-        <a class="product-wordmark" href="/" aria-label="goster.me ana sayfa">
-            goster.me
-        </a>
+        <a class="product-wordmark" href="/">goster.me</a>
     </header>
 
     <section class="hero" aria-labelledby="hero-title">
         <p class="eyebrow">İçerik, gürültü olmadan.</p>
-
         <h1 id="hero-title">
             Gerekmeyen hiçbir şeyi<br>
             <span class="domain-punch">goster.me</span>
@@ -115,146 +143,18 @@ def render_home() -> str:
         </p>
         <p>
             Bir videoyu, oyunu, ödevi ya da etkinliği görmek için reklamları,
-            önerileri, otomatik oynatmayı, karmaşık menüleri ve gereksiz sayfa
-            kalabalığını da görmek zorunda değiliz. Özellikle çocuklarımız için.
+            önerileri, otomatik oynatmayı ve gereksiz sayfa kalabalığını da
+            görmek zorunda değiliz. Özellikle çocuklarımız için.
         </p>
     </section>
 
     <footer class="product-footer">
-        <span>Kısa adres. Temiz içerik. Daha az dikkat dağıtıcı.</span>
+        <span>Kısa adres. Temiz içerik.</span>
         <a href="https://github.com/humit/goster.me" rel="noopener noreferrer" target="_blank">
             Açık kaynak ↗
         </a>
     </footer>
 </main>
-
-<style>
-/* Product shell intentionally stays quiet: the content is the product. */
-.product-home {{
-    width: min(100%, 760px);
-    justify-content: flex-start;
-    gap: 0;
-    padding-top: max(26px, env(safe-area-inset-top));
-}}
-
-.product-header {{
-    display: flex;
-    align-items: center;
-    min-height: 44px;
-    margin-bottom: clamp(54px, 10vh, 100px);
-}}
-
-.product-wordmark {{
-    color: var(--text);
-    text-decoration: none;
-    font-size: 20px;
-    font-weight: 850;
-    letter-spacing: -.04em;
-}}
-
-.hero {{
-    max-width: 700px;
-}}
-
-.eyebrow {{
-    margin: 0 0 15px;
-    color: var(--accent);
-    font-size: 13px;
-    font-weight: 750;
-    letter-spacing: .08em;
-    text-transform: uppercase;
-}}
-
-.product-home h1 {{
-    max-width: 690px;
-    margin-bottom: 20px;
-    font-size: clamp(42px, 8vw, 72px);
-    line-height: .98;
-}}
-
-.domain-punch {{
-    color: var(--accent-strong);
-}}
-
-.hero-copy {{
-    max-width: 580px;
-    margin: 0 0 28px;
-    color: #cbd5e1;
-    font-size: clamp(17px, 2.5vw, 20px);
-    line-height: 1.55;
-}}
-
-.product-url-form {{
-    max-width: 680px;
-}}
-
-.current-slogan {{
-    min-height: 22px;
-    margin: 16px 4px 0;
-    color: var(--muted);
-    font-size: 14px;
-}}
-
-.manifesto {{
-    max-width: 680px;
-    margin-top: clamp(72px, 12vh, 120px);
-    padding-top: 28px;
-    border-top: 1px solid rgba(148, 163, 184, .18);
-}}
-
-.manifesto h2 {{
-    margin: 0 0 18px;
-    font-size: 14px;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: .08em;
-}}
-
-.manifesto p {{
-    max-width: 640px;
-    margin: 0 0 14px;
-    color: var(--muted);
-    font-size: 15px;
-    line-height: 1.65;
-}}
-
-.manifesto .manifesto-lead {{
-    color: var(--text);
-    font-size: clamp(20px, 3vw, 25px);
-    line-height: 1.45;
-    letter-spacing: -.015em;
-}}
-
-.product-footer {{
-    margin-top: 70px;
-    padding: 22px 0 4px;
-    border-top: 1px solid rgba(148, 163, 184, .12);
-    display: flex;
-    justify-content: space-between;
-    gap: 18px;
-    color: #64748b;
-    font-size: 12px;
-}}
-
-.product-footer a {{
-    color: var(--muted);
-    text-decoration: none;
-}}
-
-@media (max-width: 520px) {{
-    .product-header {{
-        margin-bottom: 52px;
-    }}
-
-    .product-home h1 {{
-        font-size: clamp(40px, 12vw, 58px);
-    }}
-
-    .product-footer {{
-        flex-direction: column;
-    }}
-}}
-</style>
 """,
     )
 
@@ -264,117 +164,38 @@ def branded_preview_actions(
     *,
     back_href: str = "/",
 ) -> str:
+    canonical = f"/{escape(item_id)}"
+
     return f"""
 <div class="viewer-toolbar product-viewer-toolbar">
     <div class="viewer-toolbar-group product-viewer-left">
-        <a
-            class="viewer-icon"
-            href="{escape(back_href)}"
-            aria-label="Geri dön"
-            title="Geri dön"
-        >←</a>
-        <a class="viewer-brand" href="/" aria-label="goster.me ana sayfa">goster.me</a>
+        <a class="viewer-icon" href="{escape(back_href)}" aria-label="Geri dön" title="Geri dön">←</a>
+        <a class="viewer-brand" href="/">goster.me</a>
     </div>
 
     <div class="viewer-toolbar-group product-viewer-actions">
-        <button id="viewer-copy" class="viewer-text-action" type="button">Kopyala</button>
-        <button id="viewer-share" class="viewer-text-action" type="button">Paylaş</button>
+        <button
+            class="viewer-action"
+            type="button"
+            data-action="copy"
+            data-url="{canonical}"
+            aria-label="Bağlantıyı kopyala"
+        >Kopyala</button>
+        <button
+            class="viewer-action"
+            type="button"
+            data-action="share"
+            data-url="{canonical}"
+            aria-label="Paylaş"
+        >Paylaş</button>
+        <a
+            class="viewer-action"
+            href="/q/{escape(item_id)}"
+            data-action="qr"
+            aria-label="QR kodu göster"
+        >QR</a>
     </div>
 </div>
-
-<style>
-.product-viewer-left {{
-    align-items: center;
-}}
-
-.viewer-brand,
-.viewer-text-action {{
-    min-height: 42px;
-    display: inline-flex;
-    align-items: center;
-    border: 1px solid rgba(255,255,255,.18);
-    background: rgba(10,15,28,.84);
-    color: #fff;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    box-shadow: 0 4px 18px rgba(0,0,0,.18);
-}}
-
-.viewer-brand {{
-    padding: 0 13px;
-    border-radius: 999px;
-    text-decoration: none;
-    font-size: 13px;
-    font-weight: 800;
-    letter-spacing: -.03em;
-}}
-
-.viewer-text-action {{
-    padding: 0 13px;
-    border-radius: 999px;
-    font-size: 13px;
-    font-weight: 750;
-    cursor: pointer;
-}}
-
-@media (max-width: 430px) {{
-    .viewer-brand {{
-        display: none;
-    }}
-
-    .viewer-text-action {{
-        width: 42px;
-        padding: 0;
-        overflow: hidden;
-        color: transparent;
-        position: relative;
-    }}
-
-    #viewer-copy::after {{
-        content: "⧉";
-    }}
-
-    #viewer-share::after {{
-        content: "↗";
-    }}
-
-    .viewer-text-action::after {{
-        position: absolute;
-        inset: 0;
-        display: grid;
-        place-items: center;
-        color: #fff;
-        font-size: 18px;
-    }}
-}}
-</style>
-
-<script>
-(() => {{
-    const cleanUrl = location.origin + "/{escape(item_id)}";
-    const copy = document.getElementById("viewer-copy");
-    const share = document.getElementById("viewer-share");
-
-    async function copyCleanUrl(button) {{
-        await navigator.clipboard.writeText(cleanUrl);
-        const old = button.textContent;
-        button.textContent = "Kopyalandı ✓";
-        setTimeout(() => button.textContent = old, 1200);
-    }}
-
-    copy?.addEventListener("click", () => copyCleanUrl(copy));
-
-    share?.addEventListener("click", async () => {{
-        if (navigator.share) {{
-            try {{
-                await navigator.share({{ url: cleanUrl }});
-                return;
-            }} catch (_) {{}}
-        }}
-        await copyCleanUrl(share);
-    }});
-}})();
-</script>
 """
 
 
@@ -382,13 +203,171 @@ legacy.render_home = render_home
 legacy.preview_actions = branded_preview_actions
 
 
+def absolute_short_url(handler, code: str) -> str:
+    forwarded_proto = handler.headers.get("X-Forwarded-Proto", "").split(",")[0].strip()
+    scheme = forwarded_proto or "http"
+    host = handler.headers.get("Host") or f"{HOST}:{PORT}"
+    return f"{scheme}://{host}/{code}"
+
+
+def render_expired(code: str) -> str:
+    return product_document(
+        "Bağlantının süresi doldu",
+        f"""
+<main class="share-page">
+    <a class="product-wordmark" href="/">goster.me</a>
+    <div class="share-card">
+        <h1>Bu bağlantının süresi doldu.</h1>
+        <p class="hero-copy">
+            Kısa bağlantılar geçicidir. Kaynak bağlantı elindeyse yeniden
+            goster.me ve yeni bir kısa adres oluştur.
+        </p>
+        <a class="button" href="/">Yeni bağlantı oluştur</a>
+        <p class="source">Kod: {escape(code)}</p>
+    </div>
+</main>
+""",
+    )
+
+
+def render_share_page(code: str, short_url: str) -> str:
+    return product_document(
+        "Paylaş — goster.me",
+        f"""
+<main class="share-page">
+    <a class="product-wordmark" href="/">goster.me</a>
+
+    <div class="share-card">
+        <img
+            class="qr-image"
+            src="/qr/{escape(code)}.svg"
+            alt="{escape(short_url)} için QR kodu"
+        >
+
+        <div class="short-url">{escape(short_url)}</div>
+
+        <div class="share-actions">
+            <a class="viewer-action" href="/{escape(code)}">Aç</a>
+            <button
+                class="viewer-action"
+                type="button"
+                data-action="copy"
+                data-url="/{escape(code)}"
+            >Kopyala</button>
+            <button
+                class="viewer-action"
+                type="button"
+                data-action="share"
+                data-url="/{escape(code)}"
+            >Paylaş</button>
+        </div>
+    </div>
+</main>
+""",
+    )
+
+
 class Handler(legacy.Handler):
-    server_version = "GosterMe/0.2"
+    server_version = "GosterMe/0.3"
+
+    def send_bytes(
+        self,
+        status: int,
+        value: bytes,
+        content_type: str,
+        *,
+        cache_control: str = "no-store",
+    ) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(value)))
+        self.send_header("Cache-Control", cache_control)
+        self.end_headers()
+        self.wfile.write(value)
+
+    def send_static(self, name: str) -> bool:
+        allowed = {
+            "product.css": "text/css; charset=utf-8",
+            "product.js": "text/javascript; charset=utf-8",
+        }
+
+        content_type = allowed.get(name)
+        if content_type is None:
+            return False
+
+        path = STATIC_DIR / name
+
+        try:
+            body = path.read_bytes()
+        except OSError:
+            self.send_error(404)
+            return True
+
+        self.send_bytes(
+            200,
+            body,
+            content_type,
+            cache_control="public, max-age=300",
+        )
+        return True
 
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
         parts = [part for part in path.split("/") if part]
+
+        if len(parts) == 2 and parts[0] == "static":
+            if self.send_static(parts[1]):
+                return
+
+        if len(parts) == 2 and parts[0] == "q":
+            code = parts[1].lower()
+
+            if SHORT_CODE_RE.fullmatch(code):
+                item = STORE.get(code, touch=False)
+                if item is None:
+                    self.send_html(410, render_expired(code))
+                    return
+
+                self.send_html(
+                    200,
+                    render_share_page(
+                        code,
+                        absolute_short_url(self, code),
+                    ),
+                )
+                return
+
+        if len(parts) == 2 and parts[0] == "qr" and parts[1].endswith(".svg"):
+            code = parts[1][:-4].lower()
+
+            if SHORT_CODE_RE.fullmatch(code):
+                item = STORE.get(code, touch=False)
+                if item is None:
+                    self.send_error(410)
+                    return
+
+                qr = segno.make(
+                    absolute_short_url(self, code),
+                    micro=False,
+                    error="m",
+                )
+                buffer = io.BytesIO()
+                qr.save(
+                    buffer,
+                    kind="svg",
+                    scale=6,
+                    border=4,
+                    dark="#111111",
+                    light="#ffffff",
+                )
+                self.send_bytes(
+                    200,
+                    buffer.getvalue(),
+                    "image/svg+xml; charset=utf-8",
+                    cache_control="private, max-age=300",
+                )
+                return
 
         # Canonical public form: goster.me/abc346
         if len(parts) == 1:
@@ -398,10 +377,7 @@ class Handler(legacy.Handler):
                 item = STORE.get(code)
 
                 if item is None:
-                    self.send_html(
-                        410,
-                        render_expired(code),
-                    )
+                    self.send_html(410, render_expired(code))
                     return
 
                 self.send_html(
@@ -422,30 +398,9 @@ class Handler(legacy.Handler):
         super().do_GET()
 
     def do_POST(self):
-        # legacy.Handler uses the monkey-patched save_item() and therefore
-        # persists the resolved item. Its final /g/<code> redirect is retained
-        # only for one hop; do_GET above canonicalizes it to /<code>.
+        # legacy.Handler uses the monkey-patched save_item() and persists the
+        # resolved item. Its /g/<code> redirect is canonicalized by do_GET().
         super().do_POST()
-
-
-def render_expired(code: str) -> str:
-    return legacy.document(
-        "Bağlantının süresi doldu",
-        f"""
-<main class="home">
-    <a class="product-wordmark" href="/">goster.me</a>
-    <h1>Bu bağlantının süresi doldu.</h1>
-    <p class="subtitle">
-        Kısa bağlantılar geçicidir. Kaynak bağlantı elindeyse yeniden
-        goster.me ve yeni bir kısa adres oluştur.
-    </p>
-    <div class="actions">
-        <a class="button" href="/">Yeni bağlantı oluştur</a>
-    </div>
-    <p class="source">Kod: {escape(code)}</p>
-</main>
-""",
-    )
 
 
 def ttl_days() -> float:
