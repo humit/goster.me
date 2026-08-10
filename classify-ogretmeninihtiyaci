@@ -1,0 +1,529 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import re
+import sys
+from collections import Counter
+from html.parser import HTMLParser
+from pathlib import Path
+from urllib.parse import urljoin, urlparse
+from urllib.request import Request, urlopen
+
+
+USER_AGENT = "Mozilla/5.0 Childsafe/0.5"
+MAX_BYTES = 5 * 1024 * 1024
+
+SOURCE_HOSTS = {
+    "ogretmeninihtiyaci.com",
+    "www.ogretmeninihtiyaci.com",
+}
+
+GAME_RE = re.compile(
+    r"(game|quiz|question|answer|option|score|puan|"
+    r"can|lives|result|sonuc|soru|cevap|secenek|"
+    r"exercise|activity|etkinlik|test)",
+    re.I,
+)
+
+AUDIO_RE = re.compile(
+    r"(audio|sound|ses|dinle|listen|voice|mp3)",
+    re.I,
+)
+
+IMAGE_EXTENSIONS = (
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".gif",
+)
+
+DOCUMENT_EXTENSIONS = (
+    ".pdf",
+    ".doc",
+    ".docx",
+    ".ppt",
+    ".pptx",
+)
+
+
+def hostname(url: str) -> str:
+    return (urlparse(url).hostname or "").lower()
+
+
+class PageParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+
+        self.in_title = False
+        self.title_parts = []
+
+        self.ids = set()
+        self.classes = set()
+
+        self.iframes = []
+        self.links = []
+        self.images = []
+        self.audio = []
+        self.scripts = []
+
+        self.inline_script_parts = []
+        self.in_script = False
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        tag = tag.lower()
+
+        if tag == "title":
+            self.in_title = True
+
+        if tag == "script":
+            self.in_script = True
+
+        element_id = attrs.get("id")
+
+        if element_id:
+            self.ids.add(element_id)
+
+        for cls in attrs.get("class", "").split():
+            if cls:
+                self.classes.add(cls)
+
+        if tag == "iframe":
+            src = (
+                attrs.get("src")
+                or attrs.get("data-src")
+                or attrs.get("data-lazy-src")
+            )
+
+            if src:
+                self.iframes.append(src)
+
+        elif tag == "a":
+            href = attrs.get("href")
+
+            if href:
+                self.links.append(href)
+
+        elif tag in {"img", "source"}:
+            src = (
+                attrs.get("src")
+                or attrs.get("data-src")
+                or attrs.get("data-lazy-src")
+            )
+
+            if src:
+                self.images.append(src)
+
+        elif tag == "audio":
+            src = attrs.get("src")
+
+            if src:
+                self.audio.append(src)
+
+        if tag == "source":
+            src = attrs.get("src")
+
+            if src and (
+                attrs.get("type", "").startswith("audio/")
+                or AUDIO_RE.search(src)
+            ):
+                self.audio.append(src)
+
+        if tag == "script":
+            src = attrs.get("src")
+
+            if src:
+                self.scripts.append(src)
+
+    def handle_endtag(self, tag):
+        tag = tag.lower()
+
+        if tag == "title":
+            self.in_title = False
+
+        if tag == "script":
+            self.in_script = False
+
+    def handle_data(self, data):
+        if self.in_title:
+            value = data.strip()
+
+            if value:
+                self.title_parts.append(value)
+
+        if self.in_script:
+            self.inline_script_parts.append(data)
+
+    @property
+    def title(self):
+        return " ".join(self.title_parts).strip()
+
+    @property
+    def inline_js(self):
+        return "\n".join(self.inline_script_parts)
+
+
+def fetch(url: str):
+    req = Request(
+        url,
+        headers={
+            "User-Agent": USER_AGENT,
+            "Accept": "text/html,application/xhtml+xml",
+        },
+    )
+
+    with urlopen(req, timeout=20) as response:
+        body = response.read(MAX_BYTES + 1)
+
+        if len(body) > MAX_BYTES:
+            raise RuntimeError("page too large")
+
+        return (
+            response.geturl(),
+            body.decode(
+                "utf-8",
+                errors="replace",
+            ),
+        )
+
+
+def resolve_all(base, values):
+    result = []
+
+    for value in values:
+        try:
+            result.append(
+                urljoin(base, value)
+            )
+        except Exception:
+            pass
+
+    return result
+
+
+def classify(url: str):
+    final_url, html = fetch(url)
+
+    parser = PageParser()
+    parser.feed(html)
+
+    iframes = resolve_all(
+        final_url,
+        parser.iframes,
+    )
+
+    links = resolve_all(
+        final_url,
+        parser.links,
+    )
+
+    images = resolve_all(
+        final_url,
+        parser.images,
+    )
+
+    audio = resolve_all(
+        final_url,
+        parser.audio,
+    )
+
+    #
+    # 1. Wordwall
+    #
+    for iframe in iframes:
+        if (
+            hostname(iframe) in {
+                "wordwall.net",
+                "www.wordwall.net",
+            }
+            and "/embed/" in urlparse(iframe).path
+        ):
+            return {
+                "kind": "wordwall",
+                "detail": iframe,
+                "title": parser.title,
+            }
+
+    #
+    # 2. External application/embed.
+    #
+    external_iframes = []
+
+    for iframe in iframes:
+        h = hostname(iframe)
+
+        if (
+            h
+            and h not in SOURCE_HOSTS
+            and h not in {
+                "youtube.com",
+                "www.youtube.com",
+                "www.google.com",
+                "google.com",
+            }
+        ):
+            external_iframes.append(iframe)
+
+    if external_iframes:
+        return {
+            "kind": "external-iframe",
+            "detail": external_iframes[0],
+            "title": parser.title,
+        }
+
+    #
+    # 3. Documents.
+    #
+    documents = []
+
+    for link in links:
+        lower = link.lower()
+        path = urlparse(lower).path
+
+        if (
+            path.endswith(DOCUMENT_EXTENSIONS)
+            or "drive.google.com/file/" in lower
+            or "docs.google.com/" in lower
+            or "acrobat.adobe.com/" in lower
+        ):
+            documents.append(link)
+
+    if documents:
+        return {
+            "kind": "document",
+            "detail": documents[0],
+            "title": parser.title,
+        }
+
+    #
+    # 4. Explicit audio.
+    #
+    if audio:
+        return {
+            "kind": "audio",
+            "detail": audio[0],
+            "title": parser.title,
+        }
+
+    #
+    # 5. Native application fingerprints.
+    #
+    interesting_ids = sorted(
+        value
+        for value in parser.ids
+        if GAME_RE.search(value)
+    )
+
+    interesting_classes = sorted(
+        value
+        for value in parser.classes
+        if GAME_RE.search(value)
+    )
+
+    dom_refs = sorted(set(
+        re.findall(
+            r'''(?:getElementById|querySelector|querySelectorAll)
+                \(\s*["']([^"']+)["']''',
+            parser.inline_js,
+            flags=re.I | re.X,
+        )
+    ))
+
+    interesting_refs = [
+        value
+        for value in dom_refs
+        if GAME_RE.search(value)
+    ]
+
+    native_score = (
+        len(interesting_ids) * 3
+        + len(interesting_classes)
+        + len(interesting_refs) * 2
+    )
+
+    if native_score >= 6:
+        detail = []
+
+        if interesting_ids:
+            detail.append(
+                "ids="
+                + ",".join(
+                    interesting_ids[:16]
+                )
+            )
+
+        if interesting_classes:
+            detail.append(
+                "classes="
+                + ",".join(
+                    interesting_classes[:16]
+                )
+            )
+
+        if interesting_refs:
+            detail.append(
+                "refs="
+                + ",".join(
+                    interesting_refs[:16]
+                )
+            )
+
+        return {
+            "kind": "native-candidate",
+            "detail": " | ".join(detail),
+            "title": parser.title,
+        }
+
+    #
+    # 6. Audio-like JavaScript activity.
+    #
+    audio_ids = sorted(
+        value
+        for value in parser.ids
+        if AUDIO_RE.search(value)
+    )
+
+    audio_classes = sorted(
+        value
+        for value in parser.classes
+        if AUDIO_RE.search(value)
+    )
+
+    if (
+        audio_ids
+        or audio_classes
+        or AUDIO_RE.search(parser.inline_js)
+    ):
+        return {
+            "kind": "audio-candidate",
+            "detail": (
+                "ids="
+                + ",".join(audio_ids[:12])
+                + " | classes="
+                + ",".join(audio_classes[:12])
+            ),
+            "title": parser.title,
+        }
+
+    #
+    # 7. Worksheet/image-heavy pages.
+    #
+    content_images = []
+
+    for image in images:
+        path = urlparse(image).path.lower()
+
+        if path.endswith(IMAGE_EXTENSIONS):
+            content_images.append(image)
+
+    #
+    # Only call it an image candidate when there are several
+    # images. Theme/logo assets otherwise generate too much noise.
+    #
+    if len(content_images) >= 3:
+        return {
+            "kind": "image-candidate",
+            "detail": f"images={len(content_images)}",
+            "title": parser.title,
+        }
+
+    return {
+        "kind": "unknown",
+        "detail": (
+            f"ids={len(parser.ids)} "
+            f"classes={len(parser.classes)} "
+            f"iframes={len(iframes)} "
+            f"links={len(links)} "
+            f"images={len(images)}"
+        ),
+        "title": parser.title,
+    }
+
+
+def clean_url(url: str) -> str:
+    return url.rstrip(
+        '.,;:!?)]}>\'"'
+    )
+
+
+def extract_urls(path: Path):
+    text = path.read_text(
+        encoding="utf-8",
+        errors="replace",
+    )
+
+    urls = re.findall(
+        r'https?://(?:www\.)?ogretmeninihtiyaci\.com/'
+        r'[^\s<>"\']+',
+        text,
+        flags=re.I,
+    )
+
+    return list(dict.fromkeys(
+        clean_url(url)
+        for url in urls
+    ))
+
+
+def main():
+    if len(sys.argv) != 2:
+        raise SystemExit(
+            f"Usage: {sys.argv[0]} CHAT.txt"
+        )
+
+    urls = extract_urls(
+        Path(sys.argv[1])
+    )
+
+    counts = Counter()
+
+    for index, url in enumerate(
+        urls,
+        1,
+    ):
+        try:
+            result = classify(url)
+
+        except Exception as exc:
+            result = {
+                "kind": "error",
+                "detail": (
+                    f"{type(exc).__name__}: {exc}"
+                ),
+                "title": "",
+            }
+
+        kind = result["kind"]
+        counts[kind] += 1
+
+        print(
+            f"{index:02}/{len(urls):02} "
+            f"{kind:18} "
+            f"{url}"
+        )
+
+        if result["title"]:
+            print(
+                f"    title : "
+                f"{result['title']}"
+            )
+
+        if result["detail"]:
+            print(
+                f"    detail: "
+                f"{result['detail']}"
+            )
+
+    print()
+    print("===== SUMMARY =====")
+
+    for kind, count in counts.most_common():
+        print(
+            f"{count:3}  {kind}"
+        )
+
+
+if __name__ == "__main__":
+    main()

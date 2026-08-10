@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+from collections import defaultdict
+from pathlib import Path
+from urllib.parse import urlparse
+
+
+URL_RE = re.compile(r'https?://[^\s<>"\']+')
+
+
+def normalize_url(url: str) -> str:
+    return url.rstrip(".,;:!?)")
+
+
+def host(url: str) -> str:
+    return (urlparse(url).hostname or "").lower()
+
+
+def extract_urls(path: Path) -> list[str]:
+    text = path.read_text(
+        encoding="utf-8",
+        errors="replace",
+    )
+
+    return sorted({
+        normalize_url(url)
+        for url in URL_RE.findall(text)
+    })
+
+
+def load_cache(path: Path) -> dict:
+    if not path.exists():
+        return {}
+
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return {}
+
+
+def main():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "corpus",
+        type=Path,
+    )
+
+    parser.add_argument(
+        "--cache",
+        type=Path,
+        default=Path(
+            "/var/lib/childsafe-inbox/analysis-cache.json"
+        ),
+    )
+
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path(
+            "/tmp/childsafe-analysis-queue.txt"
+        ),
+    )
+
+    parser.add_argument(
+        "--regression-per-provider",
+        type=int,
+        default=1,
+    )
+
+    args = parser.parse_args()
+
+    urls = extract_urls(args.corpus)
+    cache = load_cache(args.cache)
+
+    queue = set()
+    regression = defaultdict(list)
+
+    cached_urls = cache.get("urls", {})
+
+    for url in urls:
+        record = cached_urls.get(url)
+
+        if not record:
+            queue.add(url)
+            continue
+
+        status = record.get("status")
+
+        if status != "resolved":
+            queue.add(url)
+            continue
+
+        provider = (
+            record.get("provider")
+            or record.get("adapter")
+            or host(url)
+        )
+
+        regression[provider].append(url)
+
+    #
+    # Add a tiny regression sample from previously successful URLs.
+    #
+    for provider, candidates in sorted(
+        regression.items()
+    ):
+        for url in sorted(candidates)[
+            :args.regression_per_provider
+        ]:
+            queue.add(url)
+
+    args.output.write_text(
+        "".join(
+            f"{url}\n"
+            for url in sorted(queue)
+        )
+    )
+
+    print(f"Corpus URLs          : {len(urls)}")
+    print(f"Cached URLs          : {len(cached_urls)}")
+    print(f"Queued URLs          : {len(queue)}")
+    print(
+        "Regression providers:",
+        len(regression),
+    )
+    print(f"Output               : {args.output}")
+
+
+if __name__ == "__main__":
+    main()

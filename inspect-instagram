@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from urllib.parse import urlparse
+
+
+def run(cmd):
+    proc = subprocess.run(
+        cmd,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def main():
+    if len(sys.argv) != 2:
+        raise SystemExit(
+            f"Usage: {sys.argv[0]} INSTAGRAM_URL"
+        )
+
+    url = sys.argv[1]
+    host = (urlparse(url).hostname or "").lower()
+
+    if host not in {
+        "instagram.com",
+        "www.instagram.com",
+    }:
+        raise SystemExit(
+            "ERROR: not an Instagram URL"
+        )
+
+    print("===== URL =====")
+    print(url)
+    print()
+
+    rc, out, err = run([
+        "yt-dlp",
+        "--dump-single-json",
+        "--skip-download",
+        "--no-warnings",
+        url,
+    ])
+
+    print("===== YT-DLP =====")
+    print("exit:", rc)
+
+    if rc != 0:
+        print(
+            err.strip()[:4000]
+            or "(no stderr)"
+        )
+        return
+
+    try:
+        data = json.loads(out)
+    except Exception as exc:
+        print(
+            "JSON parse error:",
+            exc,
+        )
+        print(out[:4000])
+        return
+
+    print("extractor :", data.get("extractor"))
+    print("id        :", data.get("id"))
+    print("title     :", data.get("title"))
+    print("webpage   :", data.get("webpage_url"))
+
+    entries = data.get("entries")
+
+    if entries is not None:
+        entries = [
+            e
+            for e in entries
+            if e
+        ]
+
+        print("type      : playlist/carousel")
+        print("entries   :", len(entries))
+
+        for index, entry in enumerate(
+            entries,
+            start=1,
+        ):
+            formats = entry.get("formats") or []
+
+            print(
+                f"{index:3}: "
+                f"id={entry.get('id')} "
+                f"ext={entry.get('ext')} "
+                f"formats={len(formats)} "
+                f"url={'yes' if entry.get('url') else 'no'} "
+                f"thumbnail={'yes' if entry.get('thumbnail') else 'no'}"
+            )
+
+        return
+
+    formats = data.get("formats") or []
+
+    print("type      : single")
+    print("ext       :", data.get("ext"))
+    print("formats   :", len(formats))
+    print(
+        "thumbnail :",
+        "yes"
+        if data.get("thumbnail")
+        else "no",
+    )
+
+
+if __name__ == "__main__":
+    main()

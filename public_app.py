@@ -89,12 +89,29 @@ BASE_STYLE = """
 <style>
 :root {
     font-family:
+        Inter,
+        ui-sans-serif,
         system-ui,
         -apple-system,
         BlinkMacSystemFont,
         "Segoe UI",
         sans-serif;
+
     color-scheme: dark;
+
+    --bg: #0b1020;
+    --surface: #121a2d;
+    --surface-2: #182238;
+    --border: #26334d;
+
+    --text: #f8fafc;
+    --muted: #94a3b8;
+
+    --accent: #7dd3fc;
+    --accent-strong: #38bdf8;
+
+    --success: #86efac;
+    --danger: #fca5a5;
 }
 
 * {
@@ -105,39 +122,228 @@ html,
 body {
     margin: 0;
     min-height: 100%;
-    background: #111827;
-    color: #f9fafb;
+    background:
+        radial-gradient(
+            circle at top,
+            #172554 0,
+            var(--bg) 340px
+        );
+    color: var(--text);
 }
 
 body {
     min-height: 100vh;
+    min-height: 100dvh;
 }
 
 main {
-    width: min(100%, 760px);
+    width: min(100%, 680px);
     margin: 0 auto;
+
     padding:
         max(22px, env(safe-area-inset-top))
         18px
-        max(36px, env(safe-area-inset-bottom));
+        max(32px, env(safe-area-inset-bottom));
+}
+
+.home {
+    min-height: 100vh;
+    min-height: 100dvh;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+
+    padding-top:
+        max(34px, env(safe-area-inset-top));
+    padding-bottom:
+        max(28px, env(safe-area-inset-bottom));
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+
+    margin-bottom: 22px;
+}
+
+.brand-mark {
+    width: 38px;
+    height: 38px;
+
+    display: grid;
+    place-items: center;
+
+    border-radius: 12px;
+
+    background:
+        linear-gradient(
+            135deg,
+            #38bdf8,
+            #818cf8
+        );
+
+    color: #07111f;
+    font-size: 21px;
+    font-weight: 900;
+
+    box-shadow:
+        0 12px 30px
+        rgba(56, 189, 248, .20);
+}
+
+.brand-name {
+    font-weight: 850;
+    letter-spacing: -.02em;
 }
 
 h1 {
-    margin: 8px 0 8px;
-    font-size: clamp(26px, 5vw, 36px);
-    line-height: 1.15;
+    margin: 0 0 10px;
+
+    font-size:
+        clamp(28px, 8vw, 42px);
+
+    line-height: 1.05;
+    letter-spacing: -.035em;
 }
 
 .subtitle {
-    margin: 0 0 28px;
-    color: #9ca3af;
+    margin: 0 0 22px;
+
+    color: var(--muted);
     line-height: 1.5;
+    font-size: 15px;
+}
+
+.supported-link {
+    appearance: none;
+
+    border: 0;
+    padding: 0;
+
+    min-height: auto;
+    background: none;
+
+    color: var(--accent);
+    font-weight: 750;
+
+    text-decoration:
+        underline
+        dotted
+        rgba(125, 211, 252, .6);
+
+    text-underline-offset: 4px;
+}
+
+.supported {
+    margin: -8px 0 18px;
+
+    border: 1px solid var(--border);
+    border-radius: 14px;
+
+    background:
+        rgba(18, 26, 45, .75);
+
+    overflow: hidden;
+}
+
+.supported summary {
+    padding: 13px 15px;
+
+    cursor: pointer;
+
+    color: #dbeafe;
+    font-size: 14px;
+    font-weight: 750;
+
+    list-style: none;
+}
+
+.supported summary::-webkit-details-marker {
+    display: none;
+}
+
+.supported summary::after {
+    content: "＋";
+    float: right;
+
+    color: var(--muted);
+}
+
+.supported[open] summary::after {
+    content: "−";
+}
+
+.supported-content {
+    padding:
+        0
+        15px
+        14px;
+
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.site-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+
+    margin-top: 10px;
+}
+
+.site-chip {
+    padding: 6px 9px;
+
+    border: 1px solid var(--border);
+    border-radius: 999px;
+
+    background: var(--surface-2);
+
+    color: #dbeafe;
+
+    font-size: 12px;
+    font-weight: 650;
+}
+
+form {
+    margin: 0;
 }
 
 label {
-    display: block;
-    margin: 22px 0 8px;
-    font-weight: 700;
+    position: absolute;
+
+    width: 1px;
+    height: 1px;
+
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+}
+
+.url-form {
+    display: grid;
+    grid-template-columns:
+        minmax(0, 1fr)
+        auto;
+
+    gap: 9px;
+
+    padding: 7px;
+
+    border:
+        1px solid
+        rgba(148, 163, 184, .22);
+
+    border-radius: 18px;
+
+    background:
+        rgba(18, 26, 45, .92);
+
+    box-shadow:
+        0 18px 50px
+        rgba(0, 0, 0, .22);
 }
 
 input,
@@ -148,13 +354,30 @@ button,
 
 input {
     width: 100%;
-    min-height: 56px;
-    border: 1px solid #4b5563;
-    border-radius: 14px;
-    padding: 0 14px;
-    background: #1f2937;
+    min-width: 0;
+
+    height: 50px;
+
+    border: 0;
+    border-radius: 12px;
+
+    padding: 0 12px;
+
+    outline: none;
+
+    background: transparent;
     color: #fff;
+
     font-size: 16px;
+}
+
+input::placeholder {
+    color: #64748b;
+}
+
+input:focus {
+    background:
+        rgba(30, 41, 59, .72);
 }
 
 button,
@@ -162,152 +385,279 @@ button,
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 52px;
+
+    min-height: 48px;
+
     border: 0;
-    border-radius: 14px;
-    padding: 0 18px;
-    background: #22c55e;
-    color: #052e16;
-    font-weight: 800;
+    border-radius: 12px;
+
+    padding: 0 17px;
+
+    background: var(--accent-strong);
+    color: #062033;
+
+    font-weight: 850;
+
     text-decoration: none;
     cursor: pointer;
 }
 
-.primary {
-    width: 100%;
-    margin-top: 18px;
+.url-submit {
+    min-width: 92px;
 }
 
 .secondary {
-    background: #1f2937;
-    color: #f9fafb;
-    border: 1px solid #4b5563;
+    background: var(--surface-2);
+    color: var(--text);
+
+    border: 1px solid var(--border);
+}
+
+.home-footer {
+    margin-top: 24px;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    gap: 12px;
+
+    color: #64748b;
+
+    font-size: 12px;
+}
+
+.home-footer a,
+.text-link {
+    color: var(--muted);
+    text-decoration: none;
+}
+
+.home-footer a:hover,
+.text-link:hover {
+    color: var(--accent);
+}
+
+.suggest-box {
+    margin-top: 12px;
+
+    padding: 14px 15px;
+
+    border:
+        1px solid
+        rgba(148, 163, 184, .16);
+
+    border-radius: 14px;
+
+    background:
+        rgba(18, 26, 45, .48);
+
+    color: var(--muted);
+
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.suggest-box strong {
+    color: #e2e8f0;
 }
 
 .card {
     margin-top: 18px;
     padding: 18px;
-    border: 1px solid #374151;
+
+    border: 1px solid var(--border);
     border-radius: 18px;
-    background: #1f2937;
+
+    background: var(--surface);
 }
 
 .actions {
     display: grid;
     gap: 10px;
+
     margin-top: 18px;
 }
 
 .status-ok {
-    color: #86efac;
+    color: var(--success);
     font-weight: 700;
 }
 
 .status-error {
-    color: #fca5a5;
+    color: var(--danger);
     font-weight: 700;
 }
 
 .activity-list {
     display: grid;
-    gap: 12px;
-    margin-top: 22px;
+    gap: 10px;
+
+    margin-top: 20px;
 }
 
 .activity {
     width: 100%;
-    min-height: 82px;
+    min-height: 76px;
+
     margin: 0;
-    background: #1f2937;
-    color: #f9fafb;
-    border: 1px solid #374151;
-    border-radius: 18px;
-    padding: 16px 18px;
+
+    background:
+        rgba(18, 26, 45, .9);
+
+    color: var(--text);
+
+    border: 1px solid var(--border);
+    border-radius: 16px;
+
+    padding: 14px 16px;
+
     text-align: left;
+
     display: flex;
     align-items: center;
     justify-content: space-between;
+
+    text-decoration: none;
 }
 
 .activity strong {
     display: block;
-    font-size: 18px;
+    font-size: 17px;
 }
 
 .activity small {
     display: block;
-    margin-top: 5px;
-    color: #9ca3af;
+
+    margin-top: 4px;
+
+    color: var(--muted);
 }
 
 .arrow {
-    color: #60a5fa;
-    font-size: 34px;
-}
-
-.topbar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 18px;
-}
-
-.topbar a {
-    color: #d1d5db;
-    text-decoration: none;
-    font-weight: 700;
-}
-
-.frame-wrap {
-    margin-top: 18px;
-    overflow: hidden;
-    border-radius: 16px;
-    background: white;
-}
-
-iframe {
-    display: block;
-    width: 100%;
-    min-height: 680px;
-    height: 82vh;
-    border: 0;
-    background: white;
+    color: var(--accent);
+    font-size: 30px;
 }
 
 .source {
     margin-top: 20px;
-    color: #6b7280;
+
+    color: #64748b;
     font-size: 12px;
+
     overflow-wrap: anywhere;
 }
 
 .fullscreen-viewer {
     position: fixed;
     inset: 0;
+
     width: 100vw;
     height: 100vh;
     height: 100dvh;
+
     background: #fff;
+
     overflow: hidden;
 }
 
 .fullscreen-frame {
     position: absolute;
     inset: 0;
+
     width: 100%;
     height: 100%;
+
     min-height: 0;
+
     border: 0;
     background: #fff;
+}
+
+.viewer-toolbar {
+    position: fixed;
+
+    z-index: 2147483647;
+
+    top:
+        max(
+            10px,
+            env(safe-area-inset-top)
+        );
+
+    left:
+        max(
+            10px,
+            env(safe-area-inset-left)
+        );
+
+    right:
+        max(
+            10px,
+            env(safe-area-inset-right)
+        );
+
+    pointer-events: none;
+
+    display: flex;
+    justify-content: space-between;
+
+    gap: 8px;
+}
+
+.viewer-toolbar-group {
+    display: flex;
+    gap: 7px;
+
+    pointer-events: auto;
+}
+
+.viewer-icon {
+    width: 42px;
+    height: 42px;
+    min-height: 42px;
+
+    padding: 0;
+
+    border:
+        1px solid
+        rgba(255, 255, 255, .18);
+
+    border-radius: 50%;
+
+    background:
+        rgba(10, 15, 28, .82);
+
+    color: #fff;
+
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+
+    box-shadow:
+        0 4px 18px
+        rgba(0, 0, 0, .22);
+
+    font-size: 19px;
+    line-height: 1;
+
+    text-decoration: none;
+}
+
+.viewer-icon:hover {
+    background:
+        rgba(15, 23, 42, .96);
 }
 
 .youtube-frame,
 .youtube-frame iframe {
     position: absolute;
     inset: 0;
+
     width: 100% !important;
     height: 100% !important;
+
     min-height: 0 !important;
+
     border: 0;
     background: #000;
 }
@@ -315,45 +665,23 @@ iframe {
 .youtube-player-frame {
     position: absolute;
     inset: 0;
+
     display: block;
+
     width: 100%;
     height: 100%;
+
     min-height: 0;
+
     border: 0;
     background: #000;
-}
-
-.viewer-fullscreen {
-    position: fixed;
-    z-index: 2147483647;
-    top: max(
-        10px,
-        env(safe-area-inset-top)
-    );
-    right: max(
-        10px,
-        env(safe-area-inset-right)
-    );
-
-    width: 46px;
-    height: 46px;
-    min-height: 46px;
-    margin: 0;
-    padding: 0;
-
-    border-radius: 50%;
-    background:
-        rgba(17, 24, 39, 0.88);
-    color: #fff;
-
-    font-size: 25px;
-    line-height: 1;
 }
 
 .youtube-finished {
     position: fixed;
     z-index: 2147483646;
     inset: 0;
+
     background: #000;
     color: #fff;
 }
@@ -364,17 +692,22 @@ iframe {
 
 .youtube-finished-card {
     width: min(90%, 420px);
+
     position: absolute;
     top: 50%;
     left: 50%;
+
     transform:
         translate(-50%, -50%);
+
     text-align: center;
 }
 
 .youtube-finished-card strong {
     display: block;
+
     margin-bottom: 22px;
+
     font-size: 24px;
 }
 
@@ -384,26 +717,53 @@ iframe {
     margin: 8px 0;
 }
 
-.viewer-back {
-    position: fixed;
-    z-index: 2147483647;
-    top: max(10px, env(safe-area-inset-top));
-    left: max(10px, env(safe-area-inset-left));
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
+.collection-head {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(17, 24, 39, 0.88);
-    color: #fff;
-    text-decoration: none;
-    font-size: 24px;
-    font-weight: 800;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.30);
+    align-items: flex-start;
+    justify-content: space-between;
+
+    gap: 12px;
+}
+
+.collection-actions {
+    display: flex;
+    gap: 7px;
+
+    flex-shrink: 0;
+}
+
+.collection-actions .viewer-icon {
+    position: static;
+}
+
+@media (max-width: 520px) {
+    .home {
+        justify-content: flex-start;
+
+        padding-top:
+            max(
+                56px,
+                env(safe-area-inset-top)
+            );
+    }
+
+    .url-form {
+        grid-template-columns: 1fr;
+    }
+
+    .url-submit {
+        width: 100%;
+    }
+
+    .home-footer {
+        align-items: flex-start;
+        flex-direction: column;
+    }
 }
 </style>
 """
+
+
 
 
 def document(title: str, body: str) -> str:
@@ -430,16 +790,89 @@ def render_home() -> str:
     return document(
         "Göster",
         """
-<main>
-    <h1>Göster</h1>
+<main class="home">
+    <div class="brand">
+        <div
+            class="brand-mark"
+            aria-hidden="true"
+        >
+            G
+        </div>
+
+        <div class="brand-name">
+            goster.me
+        </div>
+    </div>
+
+    <h1>
+        Bağlantıyı sadeleştir.
+    </h1>
 
     <p class="subtitle">
-        Öğretmenin gönderdiği bağlantıyı yapıştırın.
-        İçeriği mümkün olduğunca sade bir görünümde hazırlayalım.
+        <button
+            id="supported-toggle"
+            class="supported-link"
+            type="button"
+        >
+            Desteklenen
+        </button>
+        bir bağlantı yapıştırın.
+        Çocuk için gerekli içeriği mümkün olduğunca
+        kaynak sitenin geri kalanından ayıralım.
     </p>
 
-    <form method="post" action="/resolve">
-        <label for="url">Bağlantı</label>
+    <details
+        id="supported"
+        class="supported"
+    >
+        <summary>
+            Desteklenen siteler
+        </summary>
+
+        <div class="supported-content">
+            Şu anda gerçek kullanım örnekleriyle
+            test edilen içerik kaynakları:
+
+            <div class="site-chips">
+                <span class="site-chip">
+                    YouTube
+                </span>
+
+                <span class="site-chip">
+                    Wordwall
+                </span>
+
+                <span class="site-chip">
+                    İlkokul Akademi
+                </span>
+
+                <span class="site-chip">
+                    İlkokul Evim
+                </span>
+
+                <span class="site-chip">
+                    ilk-okul.com
+                </span>
+
+                <span class="site-chip">
+                    TestSaati
+                </span>
+
+                <span class="site-chip">
+                    Eğitimgen
+                </span>
+            </div>
+        </div>
+    </details>
+
+    <form
+        class="url-form"
+        method="post"
+        action="/resolve"
+    >
+        <label for="url">
+            Bağlantı
+        </label>
 
         <input
             id="url"
@@ -448,17 +881,80 @@ def render_home() -> str:
             inputmode="url"
             autocomplete="off"
             autocapitalize="off"
+            spellcheck="false"
             placeholder="https://..."
             required
+            autofocus
         >
 
-        <button class="primary" type="submit">
-            Hazırla
+        <button
+            class="url-submit"
+            type="submit"
+        >
+            Göster
         </button>
     </form>
+
+    <details class="suggest-box">
+        <summary>
+            <strong>Site öner</strong>
+        </summary>
+
+        <p>
+            Kullandığınız eğitim sitesi henüz
+            desteklenmiyorsa bağlantıyı proje
+            sayfasından iletebilirsiniz.
+        </p>
+
+        <a
+            class="text-link"
+            href="https://github.com/humit/goster.me/issues/new"
+            rel="noopener noreferrer"
+            target="_blank"
+        >
+            Site önerisi gönder ↗
+        </a>
+    </details>
+
+    <div class="home-footer">
+        <span>
+            Reklamları değil, dikkat dağıtan
+            web ortamını azaltmayı hedefler.
+        </span>
+
+        <a
+            href="https://github.com/humit/goster.me"
+            rel="noopener noreferrer"
+            target="_blank"
+        >
+            Açık kaynak ↗
+        </a>
+    </div>
 </main>
+
+<script>
+const supportedToggle =
+    document.getElementById(
+        "supported-toggle"
+    );
+
+const supported =
+    document.getElementById(
+        "supported"
+    );
+
+supportedToggle.addEventListener(
+    "click",
+    () => {
+        supported.open =
+            !supported.open;
+    }
+);
+</script>
 """,
     )
+
+
 
 
 def render_result(
@@ -549,6 +1045,120 @@ document.getElementById("share").addEventListener(
     )
 
 
+def preview_actions(
+    item_id: str,
+    *,
+    back_href: str = "/",
+) -> str:
+    return f"""
+<div class="viewer-toolbar">
+    <div class="viewer-toolbar-group">
+        <a
+            class="viewer-icon"
+            href="{escape(back_href)}"
+            aria-label="Geri dön"
+            title="Geri dön"
+        >
+            ←
+        </a>
+    </div>
+
+    <div class="viewer-toolbar-group">
+        <button
+            id="viewer-copy"
+            class="viewer-icon"
+            type="button"
+            aria-label="Bağlantıyı kopyala"
+            title="Bağlantıyı kopyala"
+        >
+            ⧉
+        </button>
+
+        <button
+            id="viewer-share"
+            class="viewer-icon"
+            type="button"
+            aria-label="Paylaş"
+            title="Paylaş"
+        >
+            ↗
+        </button>
+    </div>
+</div>
+
+<script>
+(() => {{
+    const cleanUrl =
+        location.origin
+        + "/g/{escape(item_id)}";
+
+    const copy =
+        document.getElementById(
+            "viewer-copy"
+        );
+
+    const share =
+        document.getElementById(
+            "viewer-share"
+        );
+
+    copy?.addEventListener(
+        "click",
+        async () => {{
+            await navigator.clipboard.writeText(
+                cleanUrl
+            );
+
+            const old =
+                copy.textContent;
+
+            copy.textContent = "✓";
+
+            setTimeout(
+                () => {{
+                    copy.textContent = old;
+                }},
+                1200
+            );
+        }}
+    );
+
+    share?.addEventListener(
+        "click",
+        async () => {{
+            if (navigator.share) {{
+                try {{
+                    await navigator.share({{
+                        url: cleanUrl
+                    }});
+
+                    return;
+                }} catch (_) {{
+                }}
+            }}
+
+            await navigator.clipboard.writeText(
+                cleanUrl
+            );
+
+            const old =
+                share.textContent;
+
+            share.textContent = "✓";
+
+            setTimeout(
+                () => {{
+                    share.textContent = old;
+                }},
+                1200
+            );
+        }}
+    );
+}})();
+</script>
+"""
+
+
 def render_youtube_embed(
     item_id: str,
     item: ResolvedContent,
@@ -565,22 +1175,7 @@ def render_youtube_embed(
     id="youtube-viewer"
     class="fullscreen-viewer youtube-viewer"
 >
-    <a
-        class="viewer-back"
-        href="/"
-        aria-label="Geri dön"
-    >
-        ←
-    </a>
-
-    <button
-        id="viewer-fullscreen"
-        class="viewer-fullscreen"
-        type="button"
-        aria-label="Tam ekran"
-    >
-        ⛶
-    </button>
+    __PREVIEW_ACTIONS__
 
     <div
         id="player-host"
@@ -626,11 +1221,6 @@ const host =
 const finished =
     document.getElementById(
         "finished"
-    );
-
-const fullscreenButton =
-    document.getElementById(
-        "viewer-fullscreen"
     );
 
 const embedUrl =
@@ -775,57 +1365,6 @@ window.onYouTubeIframeAPIReady =
     };
 
 
-async function enterFullscreen() {
-    try {
-        if (!document.fullscreenElement) {
-            await viewer.requestFullscreen();
-        }
-
-        if (
-            screen.orientation
-            && screen.orientation.lock
-        ) {
-            try {
-                await screen.orientation.lock(
-                    "landscape"
-                );
-            } catch (_) {
-            }
-        }
-    } catch (_) {
-    }
-}
-
-
-function unlockOrientation() {
-    if (
-        screen.orientation
-        && screen.orientation.unlock
-    ) {
-        try {
-            screen.orientation.unlock();
-        } catch (_) {
-        }
-    }
-}
-
-
-fullscreenButton.addEventListener(
-    "click",
-    enterFullscreen
-);
-
-
-document.addEventListener(
-    "fullscreenchange",
-    () => {
-        if (!document.fullscreenElement) {
-            unlockOrientation();
-        }
-    }
-);
-
-
 document.getElementById(
     "replay"
 ).addEventListener(
@@ -846,6 +1385,13 @@ document.getElementById(
 );
 </script>
 """
+
+    body = body.replace(
+        "__PREVIEW_ACTIONS__",
+        preview_actions(
+            item_id,
+        ),
+    )
 
     body = body.replace(
         "__EMBED_URL__",
@@ -873,13 +1419,14 @@ def render_embed(
         title,
         f"""
 <div class="fullscreen-viewer">
-    <a
-        class="viewer-back"
-        href="/g/{escape(item_id)}"
-        aria-label="Etkinliklere dön"
-    >
-        ←
-    </a>
+    {preview_actions(
+        item_id,
+        back_href=(
+            f"/g/{escape(item_id)}"
+            if item.render_mode == "embed-collection"
+            else "/"
+        ),
+    )}
 
     <iframe
         class="fullscreen-frame"
@@ -924,15 +1471,46 @@ def render_collection(
         title,
         f"""
 <main>
-    <h1>{escape(title)}</h1>
+    <div class="collection-head">
+        <div>
+            <h1>{escape(title)}</h1>
 
-    <p class="subtitle">
-        {len(item.content_urls)} etkinlik
-    </p>
+            <p class="subtitle">
+                {len(item.content_urls)} etkinlik
+            </p>
+        </div>
+
+        <div class="collection-actions">
+            <button
+                id="viewer-copy"
+                class="viewer-icon"
+                type="button"
+                aria-label="Bağlantıyı kopyala"
+                title="Bağlantıyı kopyala"
+            >
+                ⧉
+            </button>
+
+            <button
+                id="viewer-share"
+                class="viewer-icon"
+                type="button"
+                aria-label="Paylaş"
+                title="Paylaş"
+            >
+                ↗
+            </button>
+        </div>
+    </div>
 
     <div class="activity-list">
         {''.join(cards)}
     </div>
+
+    {preview_actions(item_id).replace(
+        '<div class="viewer-toolbar">',
+        '<div class="viewer-toolbar" hidden>',
+    )}
 </main>
 """,
     )
@@ -1188,13 +1766,7 @@ def render_child(
             title,
             f"""
 <div class="fullscreen-viewer">
-    <a
-        class="viewer-back"
-        href="/"
-        aria-label="Geri dön"
-    >
-        ←
-    </a>
+    {preview_actions(item_id)}
 
     <iframe
         class="fullscreen-frame"
@@ -1454,12 +2026,8 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
 
-        self.send_html(
-            200,
-            render_result(
-                item_id,
-                item,
-            ),
+        self.redirect(
+            f"/g/{item_id}"
         )
 
     def log_message(self, fmt, *args):

@@ -1,0 +1,400 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import re
+import sys
+from collections import Counter
+from html.parser import HTMLParser
+from pathlib import Path
+from urllib.parse import urljoin, urlparse
+from urllib.request import Request, urlopen
+
+
+USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) "
+    "AppleWebKit/537.36 Chrome/138 Safari/537.36"
+)
+
+MAX_BYTES = 5 * 1024 * 1024
+
+SOURCE_HOSTS = {
+    "ilk-okul.com",
+    "www.ilk-okul.com",
+}
+
+
+def hostname(url: str) -> str:
+    return (urlparse(url).hostname or "").lower()
+
+
+class Parser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+
+        self.in_title = False
+        self.in_script = False
+
+        self.title_parts = []
+        self.ids = set()
+        self.classes = set()
+
+        self.iframes = []
+        self.links = []
+        self.scripts = []
+
+        self.inline_js = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        tag = tag.lower()
+
+        if tag == "title":
+            self.in_title = True
+
+        if tag == "script":
+            self.in_script = True
+
+            src = attrs.get("src")
+            if src:
+                self.scripts.append(src)
+
+        element_id = attrs.get("id")
+        if element_id:
+            self.ids.add(element_id)
+
+        for cls in attrs.get("class", "").split():
+            if cls:
+                self.classes.add(cls)
+
+        if tag == "iframe":
+            src = (
+                attrs.get("src")
+                or attrs.get("data-src")
+                or attrs.get("data-lazy-src")
+            )
+
+            if src:
+                self.iframes.append(src)
+
+        if tag == "a":
+            href = attrs.get("href")
+            if href:
+                self.links.append(href)
+
+    def handle_endtag(self, tag):
+        tag = tag.lower()
+
+        if tag == "title":
+            self.in_title = False
+
+        if tag == "script":
+            self.in_script = False
+
+    def handle_data(self, data):
+        if self.in_title:
+            value = data.strip()
+            if value:
+                self.title_parts.append(value)
+
+        if self.in_script:
+            self.inline_js.append(data)
+
+    @property
+    def title(self):
+        return " ".join(self.title_parts).strip()
+
+    @property
+    def js(self):
+        return "\n".join(self.inline_js)
+
+
+def fetch(url: str):
+    req = Request(
+        url,
+        headers={
+            "User-Agent": USER_AGENT,
+            "Accept": "text/html,application/xhtml+xml",
+        },
+    )
+
+    with urlopen(req, timeout=20) as response:
+        body = response.read(MAX_BYTES + 1)
+
+        if len(body) > MAX_BYTES:
+            raise RuntimeError("page too large")
+
+        return (
+            response.status,
+            response.geturl(),
+            response.headers,
+            body.decode(
+                "utf-8",
+                errors="replace",
+            ),
+        )
+
+
+def health_check(
+    status: int,
+    final_url: str,
+    html: str,
+):
+    if status >= 400:
+        return (
+            False,
+            f"http-{status}",
+        )
+
+    lower = html.lower()
+
+    if len(html) < 300:
+        return (
+            False,
+            f"suspicious-short-body:{len(html)}",
+        )
+
+    parked_signals = (
+        "domain is parked",
+        "parked free",
+        "godaddy.com/domainsearch",
+        "lander_type=parkweb",
+        "traffic_target=reseller",
+    )
+
+    if any(
+        signal in lower
+        for signal in parked_signals
+    ):
+        return (
+            False,
+            "parked-domain",
+        )
+
+    return True, "healthy"
+
+
+def classify(url: str):
+    status, final_url, headers, html = fetch(url)
+
+    healthy, health_reason = health_check(
+        status,
+        final_url,
+        html,
+    )
+
+    if not healthy:
+        return {
+            "kind": "unhealthy",
+            "detail": health_reason,
+            "title": "",
+        }
+
+    parser = Parser()
+    parser.feed(html)
+
+    iframes = [
+        urljoin(final_url, src)
+        for src in parser.iframes
+    ]
+
+    #
+    # External embeds.
+    #
+    for iframe in iframes:
+        h = hostname(iframe)
+
+        if h and h not in SOURCE_HOSTS:
+            return {
+                "kind": "external-iframe",
+                "detail": iframe,
+                "title": parser.title,
+            }
+
+    #
+    # Strong native-game indicators.
+    #
+    js = parser.js
+
+    refs = sorted(set(
+        re.findall(
+            r'''(?:getElementById|querySelector|querySelectorAll)
+                \(\s*["']([^"']+)["']''',
+            js,
+            flags=re.I | re.X,
+        )
+    ))
+
+    interesting = re.compile(
+        r"(game|quiz|question|answer|option|score|"
+        r"puan|can|life|result|soru|cevap|"
+        r"kelime|harf|hece|balon|yumurta|oyun)",
+        re.I,
+    )
+
+    interesting_ids = sorted(
+        x
+        for x in parser.ids
+        if interesting.search(x)
+    )
+
+    interesting_classes = sorted(
+        x
+        for x in parser.classes
+        if interesting.search(x)
+    )
+
+    interesting_refs = sorted(
+        x
+        for x in refs
+        if interesting.search(x)
+    )
+
+    if (
+        interesting_ids
+        or interesting_classes
+        or interesting_refs
+    ):
+        detail = []
+
+        if interesting_ids:
+            detail.append(
+                "ids="
+                + ",".join(
+                    interesting_ids[:20]
+                )
+            )
+
+        if interesting_classes:
+            detail.append(
+                "classes="
+                + ",".join(
+                    interesting_classes[:20]
+                )
+            )
+
+        if interesting_refs:
+            detail.append(
+                "refs="
+                + ",".join(
+                    interesting_refs[:20]
+                )
+            )
+
+        return {
+            "kind": "native-candidate",
+            "detail": " | ".join(detail),
+            "title": parser.title,
+        }
+
+    #
+    # Page still contains substantial JS but no obvious
+    # educational fingerprint.
+    #
+    if len(js.strip()) > 500:
+        return {
+            "kind": "js-candidate",
+            "detail": (
+                f"ids={len(parser.ids)} "
+                f"classes={len(parser.classes)} "
+                f"js={len(js)}"
+            ),
+            "title": parser.title,
+        }
+
+    return {
+        "kind": "unknown",
+        "detail": (
+            f"ids={len(parser.ids)} "
+            f"classes={len(parser.classes)} "
+            f"iframes={len(iframes)} "
+            f"js={len(js)}"
+        ),
+        "title": parser.title,
+    }
+
+
+def clean_url(url: str) -> str:
+    return url.rstrip(
+        '.,;:!?)]}>\'"'
+    )
+
+
+def extract_urls(path: Path):
+    text = path.read_text(
+        encoding="utf-8",
+        errors="replace",
+    )
+
+    urls = re.findall(
+        r'https?://(?:www\.)?ilk-okul\.com/'
+        r'[^\s<>"\']+',
+        text,
+        flags=re.I,
+    )
+
+    return list(dict.fromkeys(
+        clean_url(url)
+        for url in urls
+    ))
+
+
+def main():
+    if len(sys.argv) != 2:
+        raise SystemExit(
+            f"Usage: {sys.argv[0]} CHAT.txt"
+        )
+
+    urls = extract_urls(
+        Path(sys.argv[1])
+    )
+
+    counts = Counter()
+
+    for index, url in enumerate(
+        urls,
+        1,
+    ):
+        try:
+            result = classify(url)
+
+        except Exception as exc:
+            result = {
+                "kind": "error",
+                "detail": (
+                    f"{type(exc).__name__}: {exc}"
+                ),
+                "title": "",
+            }
+
+        counts[result["kind"]] += 1
+
+        print(
+            f"{index:02}/{len(urls):02} "
+            f"{result['kind']:18} "
+            f"{url}"
+        )
+
+        if result["title"]:
+            print(
+                f"    title : "
+                f"{result['title']}"
+            )
+
+        if result["detail"]:
+            print(
+                f"    detail: "
+                f"{result['detail']}"
+            )
+
+    print()
+    print("===== SUMMARY =====")
+
+    for kind, count in counts.most_common():
+        print(
+            f"{count:3}  {kind}"
+        )
+
+
+if __name__ == "__main__":
+    main()
