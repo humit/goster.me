@@ -1,0 +1,29 @@
+[Unit]
+Description=goster.me public content service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gosterme
+Group=gosterme
+WorkingDirectory=/opt/goster.me
+EnvironmentFile=-/etc/goster.me/gosterme.env
+ExecStart=/opt/goster.me/.venv/bin/python /opt/goster.me/product_app.py
+Restart=on-failure
+RestartSec=2
+
+# Persistent application state lives here. systemd creates it with the
+# service account as owner when the unit starts.
+StateDirectory=goster.me
+StateDirectoryMode=0750
+
+# Basic hardening. Keep networking and writable state available to adapters.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/goster.me
+
+[Install]
+WantedBy=multi-user.target
