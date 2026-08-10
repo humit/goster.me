@@ -110,8 +110,8 @@ def render_home() -> str:
         </form>
 
         <nav class="minimal-links" aria-label="Bilgi">
-            <a href="/about#how">Nasıl çalışır?</a>
             <a href="/about">Hakkında</a>
+            <a href="https://github.com/humit/goster.me/issues" rel="noopener noreferrer" target="_blank">İletişim</a>
         </nav>
     </section>
 </main>
@@ -195,6 +195,7 @@ def branded_preview_actions(
             data-action="copy"
             data-url="{canonical}"
             aria-label="Bağlantıyı kopyala"
+            title="Bağlantıyı kopyala"
         >Kopyala</button>
         <button
             class="viewer-action"
@@ -202,12 +203,14 @@ def branded_preview_actions(
             data-action="share"
             data-url="{canonical}"
             aria-label="Paylaş"
+            title="Paylaş"
         >Paylaş</button>
         <a
             class="viewer-action"
             href="/q/{escape(item_id)}"
             data-action="qr"
             aria-label="QR kodu göster"
+            title="QR kodu göster"
         >QR</a>
     </div>
 </div>
