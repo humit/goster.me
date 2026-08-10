@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import gzip
+import threading
+import time
 from dataclasses import asdict, dataclass
 from html.parser import HTMLParser
 from io import BytesIO
@@ -13,6 +15,15 @@ from urllib.request import Request, urlopen
 
 USER_AGENT = "Mozilla/5.0 Childsafe/0.2"
 MAX_HTML_BYTES = 2 * 1024 * 1024
+
+HTML_CACHE_TTL = 120.0
+
+_html_cache: dict[
+    str,
+    tuple[float, str, str],
+] = {}
+
+_html_cache_lock = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -98,6 +109,10 @@ def fetch_html(
         final_url, decoded_html
 
     Redirects are checked against the same allowlist.
+
+    Recently fetched documents are cached briefly in memory so
+    multiple adapters, or a renderer following resolution, do not
+    immediately download the same source page again.
     """
 
     url = normalized_url(url)
@@ -108,6 +123,23 @@ def fetch_html(
         raise ResolveError(
             f"Host not allowed: {source_host}"
         )
+
+    now = time.monotonic()
+
+    with _html_cache_lock:
+        cached = _html_cache.get(url)
+
+    if cached is not None:
+        cached_at, final_url, document = cached
+
+        if (
+            now - cached_at <= HTML_CACHE_TTL
+            and hostname(final_url) in allowed_hosts
+        ):
+            return final_url, document
+
+        with _html_cache_lock:
+            _html_cache.pop(url, None)
 
     request = Request(
         url,
@@ -121,7 +153,10 @@ def fetch_html(
     )
 
     try:
-        with urlopen(request, timeout=15) as response:
+        with urlopen(
+            request,
+            timeout=15,
+        ) as response:
             final_url = response.geturl()
             final_host = hostname(final_url)
 
@@ -136,16 +171,23 @@ def fetch_html(
                 "",
             )
 
-            if "text/html" not in content_type.lower():
+            if (
+                "text/html"
+                not in content_type.lower()
+            ):
                 raise ResolveError(
                     "Expected HTML, got: "
                     f"{content_type}"
                 )
 
-            content_encoding = response.headers.get(
-                "Content-Encoding",
-                "",
-            ).strip().lower()
+            content_encoding = (
+                response.headers.get(
+                    "Content-Encoding",
+                    "",
+                )
+                .strip()
+                .lower()
+            )
 
             body = response.read(
                 MAX_HTML_BYTES + 1
@@ -153,7 +195,8 @@ def fetch_html(
 
             if len(body) > MAX_HTML_BYTES:
                 raise ResolveError(
-                    "Compressed HTML document is too large."
+                    "Compressed HTML document "
+                    "is too large."
                 )
 
             if content_encoding == "gzip":
@@ -198,6 +241,13 @@ def fetch_html(
         "utf-8",
         errors="replace",
     )
+
+    with _html_cache_lock:
+        _html_cache[url] = (
+            time.monotonic(),
+            final_url,
+            document,
+        )
 
     return final_url, document
 
