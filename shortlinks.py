@@ -16,7 +16,7 @@ from adapters import ResolvedContent
 
 # Deliberately excludes characters that are easy to confuse when a code is
 # read from another screen or spoken aloud: 0/O, 1/I/l, 2/Z and 5/S.
-SHORT_CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz346789"
+SHORT_CODE_ALPHABET = "abcdefghjkmnpqrstuvwxy346789"
 SHORT_CODE_LENGTH = int(
     os.environ.get("GOSTER_SHORT_CODE_LENGTH", "6")
 )
