@@ -1,210 +1,211 @@
-# Childsafe Inbox
+# goster.me
 
-Childsafe Inbox converts teacher- and parent-shared web content into safer,
-focused content that children can access without navigating the original
-websites or platforms.
+**Gerekmeyen hiçbir şeyi goster.me.**
 
-The project currently targets the practical flow:
+goster.me, internette görmek istediğimiz içerik ile o içeriğin etrafına yerleştirilen
+reklam, öneri, otomatik oynatma, dikkat çekme mekanizmaları, karmaşık navigasyon ve
+gereksiz sayfa kalabalığının aynı şey olmadığı fikrinden doğdu.
+
+Bir videoyu izlemek, bir oyunu oynamak, bir ödevi yapmak veya bir etkinliği açmak
+istediğimizde kaynak sitenin bütün arayüzünü de kabul etmek zorunda değiliz.
+Özellikle çocuklarımız için.
+
+> **İçeriğe erişmek, onu çevreleyen dikkat ekonomisini kabul etmek değildir.**
+
+Bu yüzden alan adı aynı zamanda ürünün mesajıdır:
+
+- Bana reklam **goster.me**.
+- Çocuğuma dikkat dağıtıcı şeyler **goster.me**.
+- Karmakarışık bir sayfa **goster.me**.
+- Videoyu göster. YouTube'u **goster.me**.
+- İçeriği göster. Gerisini **goster.me**.
+
+## Ne yapar?
+
+Kullanıcı normal bir web bağlantısını goster.me'ye verir. Resolver ve adapter katmanı
+bağlantının gerçekten istenen bölümünü bulur; renderer mümkün olduğunda yalnızca bu
+içeriği gösterir.
 
 ```text
-Teacher / WhatsApp
+uzun / karmaşık kaynak URL
         |
         v
-Parent Childsafe Inbox
+resolver + content adapter
         |
-        v
-URL resolver and content adapters
-        |
-        +-- YouTube --------> local video / Jellyfin
+        +-- YouTube --------> contained video
         +-- Wordwall -------> clean embed
-        +-- native exercise -> isolated original application
-        +-- document -------> document pipeline (planned)
-        +-- unknown --------> review / unsupported
+        +-- native exercise -> isolated application
+        +-- collection -----> clean activity list
+        +-- unknown --------> fail closed / review
         |
         v
-Child-facing safe content
-Design principles
-Do not expose children to unnecessary source-site navigation.
-Preserve interactive applications when their JavaScript depends on the
-original DOM.
-Prefer clean provider embeds when available.
-Use explicit adapter fingerprints rather than broad page scraping.
-Fail closed when content cannot be identified safely.
-Keep media acquisition separate from presentation.
-Use the real teacher-shared URL corpus as the compatibility benchmark.
-Render modes
-embed
+goster.me/k7p3mx
+```
 
-Used when the activity already has a clean provider URL, such as Wordwall or
-a trusted standalone exercise.
+Public kısa bağlantılar özellikle başka bir cihazda açılabilsin diye insan tarafından
+okunabilir ve söylenebilir olmalıdır. Kısa kod alfabesi `0/O`, `1/I/l`, `2/Z`, `5/S`
+gibi kolay karışan karakterleri kullanmaz.
 
+Varsayılan kısa bağlantı ömrü şu anda 14 gündür. Bu süre deployment ortamında
+`GOSTER_LINK_TTL_SECONDS` ile değiştirilebilir. Kısa bağlantılar SQLite içinde kalıcı
+olarak saklanır; web servisinin yeniden başlaması bağlantıları kaybettirmez.
+
+## Tasarım ilkeleri
+
+- Gerçek içeriği öne çıkar; goster.me arayüzünün kendisi dikkat istememeli.
+- Kaynak sitenin gereksiz navigasyonunu çocuğa veya son kullanıcıya taşıma.
+- Etkileşimli uygulamaları, JavaScript'leri orijinal DOM'a bağlıysa bozma.
+- Mümkün olduğunda temiz provider embed'lerini tercih et.
+- Geniş ve kırılgan scraping yerine açık adapter fingerprint'leri kullan.
+- Güvenli biçimde tanımlanamayan içerikte fail closed davran.
+- Media acquisition ile presentation katmanını ayrı tut.
+- Gerçek öğretmen/veli URL corpus'unu compatibility benchmark olarak kullan.
+- Paylaşılan temiz görünümde `goster.me`, geri, kopyala ve paylaş kontrolleri görünür
+  ve tutarlı olmalı.
+
+## Kısa bağlantı modeli
+
+Public ürünün canonical biçimi:
+
+```text
+https://goster.me/k7p3mx
+```
+
+Eski prototipteki `/g/<id>` rotası geçiş dönemi için compatibility route olarak
+korunabilir, ancak kullanıcıya gösterilen/kopyalanan URL kısa canonical adres olmalıdır.
+
+Kısa bağlantı store'u `shortlinks.py` içindedir. Varsayılan veritabanı:
+
+```text
+/var/lib/goster.me/goster.sqlite3
+```
+
+Değiştirmek için:
+
+```bash
+export GOSTER_DATABASE=/path/to/goster.sqlite3
+```
+
+## Public uygulama
+
+`product_app.py`, mevcut adapter/renderer kodunu yeniden yazmadan public ürün
+kabuğunu ekler:
+
+- manifesto odaklı minimal landing page;
+- her page load'da sakin biçimde seçilen tek örnek slogan;
+- persistent human-friendly kısa URL;
+- canonical `/<short-code>` route;
+- branded viewer toolbar;
+- copy/share davranışı;
+- expired-link ekranı.
+
+Çalıştırmak için:
+
+```bash
+python3 product_app.py
+```
+
+Varsayılan bind ayarları environment ile değiştirilebilir:
+
+```bash
+GOSTER_HOST=127.0.0.1 GOSTER_PORT=8090 python3 product_app.py
+```
+
+## Childsafe ve Childsafe Inbox
+
+Projenin kökeni çocuklar için daha kontrollü bir web deneyimi oluşturma ihtiyacıdır.
+Bu kullanım alanı **Childsafe** olarak devam eder.
+
+**Childsafe Inbox** ise ebeveynin/öğretmenin paylaştığı bağlantıları yerel medya ve
+Jellyfin iş akışına alan özel ingestion aracıdır. Public goster.me ürünü bununla aynı
+adapter bilgisini paylaşabilir, ancak yalnızca Jellyfin veya yalnızca çocuk içeriğiyle
+sınırlı değildir.
+
+## Render modları
+
+### `embed`
+
+Kaynakta zaten temiz bir provider URL varsa yalnızca etkinlik embed edilir.
+
+```text
 source page
     -> adapter discovers provider URL
-    -> Childsafe embeds only the activity
-isolate
+    -> goster.me embeds only the activity
+```
 
-Used for interactive applications implemented directly inside the source page.
+### `isolate`
 
-The original HTML, CSS and JavaScript remain intact. Childsafe visually isolates
-the activity DOM root instead of extracting or moving it.
+Interactive uygulama kaynak sayfanın kendi DOM/JavaScript yapısına bağlıysa HTML'i
+parçalamak yerine uygulamanın DOM root'u görünür bırakılır, sayfanın geri kalanı
+izole edilir.
 
+```text
 source page
     -> adapter identifies application fingerprint
     -> selector is returned
     -> renderer hides unrelated page content
+```
 
-This avoids breaking applications whose JavaScript was initialized against the
-original DOM.
+## Mevcut adapter aileleri
 
-Current adapters
+Proof of concept bugün şu içerik ailelerini kapsar:
 
-The current proof of concept includes support for:
+- YouTube;
+- Wordwall embed'leri;
+- eğitim sitelerine gömülmüş Wordwall etkinlikleri;
+- TestSaati Zombify quiz'leri;
+- İlkokul Akademi native interactive exercises;
+- İlkokul Akademi trusted GitHub Pages exercise embed'leri;
+- gerçek URL corpus'undan eklenen diğer kontrollü eğitim sitesi adapter'ları.
 
-YouTube
-Wordwall embeds
-Wordwall activities embedded in supported education sites
-TestSaati Zombify quizzes
-İlkokul Akademi native interactive exercises
-İlkokul Akademi trusted GitHub Pages exercise embeds
+Yeni provider'lar gerçek kullanımda görülen URL'lere göre eklenir.
 
-Additional providers are added based on URLs observed in the real corpus.
+## Önemli dosyalar
 
-Important files
-app.py
-    Childsafe Inbox web service
+`product_app.py`
+: Public goster.me ürün kabuğu ve canonical short-link route'ları.
 
-adapters.py
-    URL matching, content resolution and adapter implementations
+`public_app.py`
+: Mevcut public renderer ve adapter entegrasyonu.
 
-test-adapter
-    Resolve and inspect a single URL
+`shortlinks.py`
+: SQLite persistent short-link store, human-friendly code generation ve TTL.
 
-analyze-corpus
-    Analyze a WhatsApp/chat URL corpus against all adapters
+`app.py`
+: Childsafe Inbox web service.
 
-inspect-native-page
-    Inspect DOM and JavaScript fingerprints of native exercises
+`adapters.py`
+: URL matching, content resolution ve adapter implementations.
 
-classify-ilkokulakademi
-    Discovery tool used while developing İlkokul Akademi support
-Adapter result model
+`test-adapter`
+: Tek URL resolve/inspection aracı.
 
-Adapters return a ResolvedContent object describing what was found.
+`analyze-corpus`
+: WhatsApp/chat URL corpus'unu bütün adapter'larla analiz eder.
 
-Important fields include:
+## Test
 
-kind
-provider
-source_url
-title
-content_url
-adapter
-render_mode
-selector
+Short-link davranışı yalnızca Python standard library kullanılarak test edilebilir:
 
-Typical native exercise:
+```bash
+python3 -m unittest -v test_shortlinks.py
+```
 
-kind        = native-exercise
-provider    = ilkokulakademi-native
-render_mode = isolate
-selector    = #game-container
+Adapter geliştirmede temsilî URL'leri önce `test-adapter` ile kontrol edin; milestone
+öncesinde tam corpus regression çalıştırın.
 
-Typical provider exercise:
+## Güvenlik yaklaşımı
 
-kind        = embed
-provider    = wordwall
-render_mode = embed
-Testing a URL
-cd /opt/childsafe-inbox
+goster.me unrestricted web proxy değildir. Temel yaklaşım **content minimization**dır:
+kullanıcının istediği içeriği mümkün olduğunca korurken kaynak platformun gereksiz
+arayüzünü, yönlendirmelerini ve dikkat çekme yüzeylerini taşımamak.
 
-./test-adapter \
-  'https://example.com/activity'
-Corpus analysis
+Unknown veya güvenli biçimde çözülemeyen içerik kontrollü bir fallback ya da uygun
+adapter geliştirilene kadar unresolved kalmalıdır.
 
-The corpus analyzer maintains a local cache under:
+Public deployment için authentication, abuse/rate limiting, storage cleanup ve
+provider-specific security politikaları ayrıca değerlendirilmelidir.
 
-.cache/analyze-corpus.json
+---
 
-The cache is intentionally not committed.
-
-Full analysis
-
-Recheck every URL:
-
-./analyze-corpus \
-  --full \
-  /home/humit/1-A-chat.txt
-
-Use this periodically as the authoritative regression run.
-
-Incremental analysis
-
-During adapter development:
-
-./analyze-corpus \
-  --incremental \
-  /home/humit/1-A-chat.txt
-
-Incremental mode:
-
-reuses cached successful results;
-retries known-but-unresolved URLs;
-retries previous errors;
-detects when a new adapter claims a previously unsupported URL;
-rechecks one known-good URL per adapter as a regression probe.
-Focus on one domain
-./analyze-corpus \
-  --incremental \
-  --domain ogretmeninihtiyaci.com \
-  /home/humit/1-A-chat.txt
-
-Bare and www hostnames are treated as the same domain for this option.
-
-Reset the cache
-./analyze-corpus \
-  --reset-cache \
-  /home/humit/1-A-chat.txt
-Development workflow
-
-A typical adapter-development cycle is:
-
-1. Identify a high-frequency unresolved domain.
-2. Inspect representative real URLs.
-3. Find stable content/application fingerprints.
-4. Implement a conservative adapter.
-5. Test representative URLs with test-adapter.
-6. Run incremental corpus analysis.
-7. Verify one or more activities in the renderer.
-8. Run a full corpus regression before a milestone/release.
-Repository workflow
-
-main contains the stable Childsafe Inbox and adapter work.
-
-Experimental features should use focused branches, for example:
-
-feature/clean-youtube
-
-This allows content-adapter work and playback experiments to evolve
-independently.
-
-Current roadmap
-
-Near-term areas include:
-
-additional high-frequency educational sites;
-generic document/PDF handling;
-Instagram educational image/post extraction;
-child-facing activity rendering;
-clean YouTube playback;
-parent-to-child content handoff and library management.
-Security model
-
-Childsafe is designed around content minimization rather than unrestricted web
-access.
-
-A resolved activity should expose only what is required for the child to use the
-material. Unknown or unsupported content remains unresolved until a suitable
-adapter or controlled fallback exists.
-
-The Inbox service should remain restricted to trusted LAN/VPN access unless an
-explicit authenticated public deployment is implemented.
+English documentation: [README.en.md](README.en.md)
