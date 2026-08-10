@@ -21,3 +21,6 @@ tmp/
 .env
 .env.*
 !.env.example
+
+# Local development backups
+*.bak.*
