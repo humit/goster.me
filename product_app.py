@@ -5,7 +5,6 @@ from __future__ import annotations
 import html
 import io
 import os
-import random
 import re
 
 from http.server import ThreadingHTTPServer
@@ -29,14 +28,6 @@ PORT = int(os.environ.get("GOSTER_PORT", str(legacy.PORT)))
 STORE = ShortLinkStore()
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "static"
-
-SLOGANS = (
-    "Bana reklam goster.me.",
-    "Çocuğuma dikkat dağıtıcı şeyler goster.me.",
-    "Karmakarışık bir sayfa goster.me.",
-    "Videoyu göster. YouTube'u goster.me.",
-    "İçeriği göster. Gerisini goster.me.",
-)
 
 SHORT_CODE_RE = re.compile(
     rf"^[{re.escape(SHORT_CODE_ALPHABET)}]"
@@ -77,7 +68,7 @@ def product_document(title: str, body: str) -> str:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0d1117">
+<meta name="theme-color" content="#0b0d10">
 <title>{escape(title)}</title>
 {legacy.BASE_STYLE}
 <link rel="stylesheet" href="/static/product.css">
@@ -94,27 +85,12 @@ legacy.document = product_document
 
 
 def render_home() -> str:
-    slogan = random.choice(SLOGANS)
-
     return product_document(
-        "goster.me — Gerekmeyeni gösterme",
-        f"""
-<main class="product-home">
-    <header class="product-header">
-        <a class="product-wordmark" href="/">goster.me</a>
-    </header>
-
-    <section class="hero" aria-labelledby="hero-title">
-        <p class="eyebrow">İçerik, gürültü olmadan.</p>
-        <h1 id="hero-title">
-            Gerekmeyen hiçbir şeyi<br>
-            <span class="domain-punch">goster.me</span>
-        </h1>
-
-        <p class="hero-copy">
-            Bir bağlantı ver. İstediğin içeriği ayıklayalım ve
-            kısa, kolay paylaşılabilir bir adreste gösterelim.
-        </p>
+        "goster.me",
+        """
+<main class="product-home product-home-minimal">
+    <section class="minimal-shell" aria-labelledby="home-title">
+        <h1 id="home-title" class="minimal-wordmark">goster.me</h1>
 
         <form class="url-form product-url-form" method="post" action="/resolve">
             <label for="url">Bağlantı</label>
@@ -133,27 +109,66 @@ def render_home() -> str:
             <button class="url-submit" type="submit">Göster</button>
         </form>
 
-        <p class="current-slogan">{escape(slogan)}</p>
+        <nav class="minimal-links" aria-label="Bilgi">
+            <a href="/about#how">Nasıl çalışır?</a>
+            <a href="/about">Hakkında</a>
+        </nav>
     </section>
+</main>
+""",
+    )
 
-    <section class="manifesto" aria-labelledby="manifesto-title">
-        <h2 id="manifesto-title">Neden?</h2>
-        <p class="manifesto-lead">
-            İçeriğe erişmek, onu çevreleyen dikkat ekonomisini kabul etmek değildir.
-        </p>
-        <p>
-            Bir videoyu, oyunu, ödevi ya da etkinliği görmek için reklamları,
-            önerileri, otomatik oynatmayı ve gereksiz sayfa kalabalığını da
-            görmek zorunda değiliz. Özellikle çocuklarımız için.
-        </p>
-    </section>
 
-    <footer class="product-footer">
-        <span>Kısa adres. Temiz içerik.</span>
-        <a href="https://github.com/humit/goster.me" rel="noopener noreferrer" target="_blank">
-            Açık kaynak ↗
-        </a>
-    </footer>
+def render_about() -> str:
+    return product_document(
+        "Hakkında — goster.me",
+        """
+<main class="info-page">
+    <header class="info-header">
+        <a class="product-wordmark" href="/">goster.me</a>
+        <a class="text-link" href="/">← Geri</a>
+    </header>
+
+    <article class="info-content">
+        <h1>İçeriği göster. Gerisini gösterme.</h1>
+        <p class="info-lead">
+            goster.me, bir bağlantının içindeki asıl içeriği ayıklayıp gereksiz
+            sayfa kalabalığını mümkün olduğunca geride bırakır.
+        </p>
+
+        <section>
+            <h2>Neden?</h2>
+            <p>
+                Bir videoyu, oyunu, ödevi ya da etkinliği görmek; reklamları,
+                önerileri, otomatik oynatmayı ve dikkat dağıtıcı arayüzleri de
+                görmek zorunda olmak demek değildir.
+            </p>
+        </section>
+
+        <section id="how">
+            <h2>Nasıl çalışır?</h2>
+            <ol>
+                <li>Kaynak bağlantıyı yapıştırırsın.</li>
+                <li>goster.me desteklediği içeriği tanır ve ayıklar.</li>
+                <li>Yalnızca gerekli içeriği kısa bir adreste gösterir.</li>
+            </ol>
+        </section>
+
+        <section>
+            <h2>Desteklenen içerikler</h2>
+            <p>
+                YouTube videoları, Wordwall etkinlikleri ve desteklenen eğitim
+                sitelerindeki belirli interaktif içerikler. Destek yeni gerçek
+                bağlantılar üzerinden genişletilir.
+            </p>
+        </section>
+
+        <p class="info-source">
+            <a href="https://github.com/humit/goster.me" rel="noopener noreferrer" target="_blank">
+                Kaynak kodu GitHub'da gör ↗
+            </a>
+        </p>
+    </article>
 </main>
 """,
     )
@@ -315,6 +330,10 @@ class Handler(legacy.Handler):
         parsed = urlparse(self.path)
         path = parsed.path
         parts = [part for part in path.split("/") if part]
+
+        if path == "/about":
+            self.send_html(200, render_about())
+            return
 
         if len(parts) == 2 and parts[0] == "static":
             if self.send_static(parts[1]):
