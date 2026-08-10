@@ -15,6 +15,14 @@
         }, 1500);
     }
 
+    function actionUrl(element) {
+        const value = element.dataset.url;
+        if (!value) {
+            return location.href;
+        }
+        return new URL(value, location.origin).href;
+    }
+
     function legacyCopy(text) {
         const area = document.createElement("textarea");
         area.value = text;
@@ -52,13 +60,12 @@
     }
 
     async function handleCopy(element) {
-        const url = element.dataset.url || location.href;
-        const ok = await copyText(url);
+        const ok = await copyText(actionUrl(element));
         showToast(ok ? "Bağlantı kopyalandı" : "Bağlantı kopyalanamadı");
     }
 
     async function handleShare(element) {
-        const url = element.dataset.url || location.href;
+        const url = actionUrl(element);
         const title = element.dataset.title || document.title;
 
         if (navigator.share) {
