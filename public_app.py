@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import json
+import os
 import secrets
 import threading
 
@@ -20,8 +21,17 @@ from adapters import (
 )
 
 
-HOST = "0.0.0.0"
-PORT = 8090
+HOST = os.environ.get(
+    "GOSTER_HOST",
+    "0.0.0.0",
+)
+
+PORT = int(
+    os.environ.get(
+        "GOSTER_PORT",
+        "8090",
+    )
+)
 
 items: dict[str, ResolvedContent] = {}
 items_lock = threading.Lock()
