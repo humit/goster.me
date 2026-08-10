@@ -2,22 +2,34 @@
 
 from __future__ import annotations
 
+import argparse
+import json
 import re
 import sys
 from collections import Counter, defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
 from adapters import (
     AdapterError,
-    UnsupportedURL,
     ResolveError,
-    resolve_url,
+    UnsupportedURL,
     matching_adapters,
+    resolve_url,
 )
 
 
-URL_RE = re.compile(r'https?://[^\s<>"\]]+')
+URL_RE = re.compile(r'https?://[^\s<>"]+')
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+DEFAULT_CACHE = SCRIPT_DIR / ".cache" / "analyze-corpus.json"
+
+CACHE_VERSION = 1
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def clean_url(url: str) -> str:
@@ -32,6 +44,25 @@ def host(url: str) -> str:
     ).lower()
 
 
+def normalized_domain(value: str) -> str:
+    value = value.strip().lower()
+
+    if value.startswith("www."):
+        value = value[4:]
+
+    return value
+
+
+def domain_matches(
+    url: str,
+    requested_domain: str,
+) -> bool:
+    return (
+        normalized_domain(host(url))
+        == normalized_domain(requested_domain)
+    )
+
+
 def extract_urls(path: Path) -> list[str]:
     text = path.read_text(
         encoding="utf-8",
@@ -44,17 +75,290 @@ def extract_urls(path: Path) -> list[str]:
     ]
 
 
-def main():
-    if len(sys.argv) < 2:
-        raise SystemExit(
-            f"Usage: {sys.argv[0]} CHAT.txt [CHAT2.txt ...]"
+def empty_cache() -> dict:
+    return {
+        "version": CACHE_VERSION,
+        "updated_at": None,
+        "urls": {},
+    }
+
+
+def load_cache(path: Path) -> dict:
+    if not path.exists():
+        return empty_cache()
+
+    try:
+        data = json.loads(
+            path.read_text(
+                encoding="utf-8",
+            )
         )
+    except Exception as exc:
+        print(
+            f"WARNING: could not read cache: {exc}",
+            file=sys.stderr,
+        )
+        return empty_cache()
+
+    if data.get("version") != CACHE_VERSION:
+        print(
+            "WARNING: cache version mismatch; rebuilding",
+            file=sys.stderr,
+        )
+        return empty_cache()
+
+    if not isinstance(data.get("urls"), dict):
+        return empty_cache()
+
+    return data
+
+
+def save_cache(
+    path: Path,
+    cache: dict,
+) -> None:
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    cache["version"] = CACHE_VERSION
+    cache["updated_at"] = utc_now()
+
+    tmp = path.with_suffix(
+        path.suffix + ".tmp"
+    )
+
+    tmp.write_text(
+        json.dumps(
+            cache,
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    tmp.replace(path)
+
+
+def resolve_record(url: str) -> dict:
+    candidates = matching_adapters(url)
+
+    try:
+        result = resolve_url(url)
+
+    except UnsupportedURL as exc:
+        if candidates:
+            category = "known-unresolved"
+        else:
+            category = "unsupported"
+
+        return {
+            "status": category,
+            "reason": str(exc),
+            "provider": None,
+            "adapter": None,
+            "kind": None,
+            "render_mode": None,
+            "selector": None,
+            "checked_at": utc_now(),
+        }
+
+    except (ResolveError, AdapterError) as exc:
+        return {
+            "status": "error",
+            "reason": str(exc),
+            "provider": None,
+            "adapter": None,
+            "kind": None,
+            "render_mode": None,
+            "selector": None,
+            "checked_at": utc_now(),
+        }
+
+    return {
+        "status": "resolved",
+        "reason": None,
+        "provider": result.provider,
+        "adapter": result.adapter,
+        "kind": result.kind,
+        "render_mode": result.render_mode,
+        "selector": result.selector,
+        "content_url": result.content_url,
+        "title": result.title,
+        "checked_at": utc_now(),
+    }
+
+
+def regression_probe_urls(
+    unique_urls: list[str],
+    cached_urls: dict,
+    per_adapter: int,
+) -> set[str]:
+    if per_adapter <= 0:
+        return set()
+
+    groups = defaultdict(list)
+
+    for url in unique_urls:
+        record = cached_urls.get(url)
+
+        if not record:
+            continue
+
+        if record.get("status") != "resolved":
+            continue
+
+        key = (
+            record.get("adapter")
+            or record.get("provider")
+            or host(url)
+        )
+
+        groups[key].append(url)
+
+    probes = set()
+
+    for key in sorted(groups):
+        for url in sorted(groups[key])[:per_adapter]:
+            probes.add(url)
+
+    return probes
+
+
+def should_recheck(
+    url: str,
+    record: dict | None,
+    *,
+    full: bool,
+    requested_domain: str | None,
+    probes: set[str],
+) -> tuple[bool, str]:
+    if full:
+        return True, "full"
+
+    if record is None:
+        return True, "uncached"
+
+    if (
+        requested_domain
+        and domain_matches(
+            url,
+            requested_domain,
+        )
+    ):
+        return True, "domain"
+
+    status = record.get("status")
+
+    if status in {
+        "known-unresolved",
+        "error",
+    }:
+        return True, status
+
+    if status == "unsupported":
+        #
+        # Recheck only if a newly added adapter now claims
+        # this previously unsupported URL.
+        #
+        if matching_adapters(url):
+            return True, "new-adapter"
+
+        return False, "cached-unsupported"
+
+    if (
+        status == "resolved"
+        and url in probes
+    ):
+        return True, "regression"
+
+    return False, "cached"
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Analyze URLs in WhatsApp/chat exports "
+            "against Childsafe content adapters."
+        )
+    )
+
+    mode = parser.add_mutually_exclusive_group()
+
+    mode.add_argument(
+        "--full",
+        action="store_true",
+        help="Recheck every unique URL.",
+    )
+
+    mode.add_argument(
+        "--incremental",
+        action="store_true",
+        help=(
+            "Use cached successful results and recheck "
+            "unresolved/error/new-adapter URLs."
+        ),
+    )
+
+    parser.add_argument(
+        "--domain",
+        help=(
+            "Force recheck of this domain in addition "
+            "to normal incremental work. www and bare "
+            "forms are treated as equivalent."
+        ),
+    )
+
+    parser.add_argument(
+        "--cache",
+        type=Path,
+        default=DEFAULT_CACHE,
+        help=f"Cache file (default: {DEFAULT_CACHE})",
+    )
+
+    parser.add_argument(
+        "--reset-cache",
+        action="store_true",
+        help="Discard existing cache before analysis.",
+    )
+
+    parser.add_argument(
+        "--regression-per-adapter",
+        type=int,
+        default=1,
+        help=(
+            "Recheck this many known-good URLs per "
+            "resolved adapter during incremental runs "
+            "(default: 1)."
+        ),
+    )
+
+    parser.add_argument(
+        "files",
+        nargs="+",
+        type=Path,
+        metavar="CHAT.txt",
+    )
+
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+
+    if args.reset_cache:
+        cache = empty_cache()
+    else:
+        cache = load_cache(args.cache)
+
+    cached_urls = cache["urls"]
 
     urls = []
 
-    for arg in sys.argv[1:]:
-        path = Path(arg)
-
+    for path in args.files:
         found = extract_urls(path)
 
         print(
@@ -64,7 +368,104 @@ def main():
 
         urls.extend(found)
 
-    unique_urls = list(dict.fromkeys(urls))
+    unique_urls = list(
+        dict.fromkeys(urls)
+    )
+
+    #
+    # Incremental is the default unless --full is used.
+    #
+    incremental = not args.full
+
+    probes = set()
+
+    if incremental:
+        probes = regression_probe_urls(
+            unique_urls,
+            cached_urls,
+            args.regression_per_adapter,
+        )
+
+    records = {}
+
+    fetched = 0
+    cache_hits = 0
+    reasons = Counter()
+
+    for index, url in enumerate(
+        unique_urls,
+        1,
+    ):
+        domain = host(url)
+        old_record = cached_urls.get(url)
+
+        recheck, reason = should_recheck(
+            url,
+            old_record,
+            full=args.full,
+            requested_domain=args.domain,
+            probes=probes,
+        )
+
+        reasons[reason] += 1
+
+        if recheck:
+            fetched += 1
+
+            print(
+                f"[{index}/{len(unique_urls)}] "
+                f"FETCH {domain} [{reason}]",
+                file=sys.stderr,
+            )
+
+            new_record = resolve_record(url)
+
+            if (
+                reason == "regression"
+                and old_record
+                and old_record.get("status") == "resolved"
+                and new_record.get("status") != "resolved"
+            ):
+                print(
+                    "WARNING: regression probe changed "
+                    f"from resolved to "
+                    f"{new_record.get('status')}: {url}",
+                    file=sys.stderr,
+                )
+
+            cached_urls[url] = new_record
+            records[url] = new_record
+
+        else:
+            cache_hits += 1
+
+            print(
+                f"[{index}/{len(unique_urls)}] "
+                f"CACHE {domain}",
+                file=sys.stderr,
+            )
+
+            records[url] = old_record
+
+    #
+    # Remove stale cache entries that are not in the current
+    # corpus only when performing an explicit full run.
+    #
+    if args.full:
+        current = set(unique_urls)
+
+        cache["urls"] = {
+            url: record
+            for url, record in cached_urls.items()
+            if url in current
+        }
+
+        cached_urls = cache["urls"]
+
+    save_cache(
+        args.cache,
+        cache,
+    )
 
     status = Counter()
     providers = Counter()
@@ -74,69 +475,69 @@ def main():
 
     examples = defaultdict(list)
 
-    for index, url in enumerate(unique_urls, 1):
+    for url in unique_urls:
         domain = host(url)
+        record = records[url]
+
         hosts[domain] += 1
 
-        print(
-            f"[{index}/{len(unique_urls)}] {domain}",
-            file=sys.stderr,
+        category = record.get(
+            "status",
+            "error",
         )
 
-        candidates = matching_adapters(url)
+        status[category] += 1
+        domain_status[domain][category] += 1
 
-        try:
-            result = resolve_url(url)
+        if category == "resolved":
+            provider = record.get("provider")
+            adapter = record.get("adapter")
 
-        except UnsupportedURL as exc:
-            if candidates:
-                category = "known-unresolved"
-            else:
-                category = "unsupported"
+            if provider:
+                providers[provider] += 1
 
-            status[category] += 1
-            domain_status[domain][category] += 1
+            if adapter:
+                adapters[adapter] += 1
 
-            if len(examples[(category, domain)]) < 5:
-                examples[(category, domain)].append(
-                    (url, str(exc))
+        elif len(
+            examples[(category, domain)]
+        ) < 5:
+            examples[
+                (category, domain)
+            ].append(
+                (
+                    url,
+                    record.get("reason")
+                    or "",
                 )
+            )
 
-            continue
+    print()
+    print("===== ANALYSIS RUN =====")
+    print(
+        f"Mode              : "
+        f"{'full' if args.full else 'incremental'}"
+    )
+    print(f"Network fetches   : {fetched}")
+    print(f"Cache hits        : {cache_hits}")
+    print(f"Regression probes : {len(probes)}")
 
-        except ResolveError as exc:
-            status["error"] += 1
-            domain_status[domain]["error"] += 1
+    if args.domain:
+        print(
+            f"Forced domain     : "
+            f"{args.domain}"
+        )
 
-            if len(examples[("error", domain)]) < 5:
-                examples[("error", domain)].append(
-                    (url, str(exc))
-                )
-
-            continue
-
-        except AdapterError as exc:
-            status["error"] += 1
-            domain_status[domain]["error"] += 1
-
-            if len(examples[("error", domain)]) < 5:
-                examples[("error", domain)].append(
-                    (url, str(exc))
-                )
-
-            continue
-
-        status["resolved"] += 1
-        domain_status[domain]["resolved"] += 1
-        providers[result.provider] += 1
-
-        if result.adapter:
-            adapters[result.adapter] += 1
+    print(f"Cache             : {args.cache}")
 
     print()
     print("===== SUMMARY =====")
-    print(f"URLs total        : {len(urls)}")
-    print(f"URLs unique       : {len(unique_urls)}")
+    print(
+        f"URLs total        : {len(urls)}"
+    )
+    print(
+        f"URLs unique       : {len(unique_urls)}"
+    )
 
     for key in (
         "resolved",
@@ -194,16 +595,20 @@ def main():
 
     unresolved_domains = Counter()
 
-    for (category, domain), values in examples.items():
+    for (
+        category,
+        domain,
+    ), values in examples.items():
         if category == "known-unresolved":
-            unresolved_domains[domain] = sum(
-                1
-                for url in unique_urls
-                if host(url) == domain
-                and matching_adapters(url)
+            unresolved_domains[domain] = (
+                domain_status[domain][
+                    "known-unresolved"
+                ]
             )
 
-    for domain, _ in unresolved_domains.most_common():
+    for domain, _ in (
+        unresolved_domains.most_common()
+    ):
         print()
         print(f"--- {domain} ---")
 
@@ -218,11 +623,20 @@ def main():
 
     unsupported_domains = Counter()
 
-    for (category, domain), values in examples.items():
+    for (
+        category,
+        domain,
+    ), values in examples.items():
         if category == "unsupported":
-            unsupported_domains[domain] += len(values)
+            unsupported_domains[domain] = (
+                domain_status[domain][
+                    "unsupported"
+                ]
+            )
 
-    for domain, _ in unsupported_domains.most_common(20):
+    for domain, _ in (
+        unsupported_domains.most_common(20)
+    ):
         print()
         print(f"--- {domain} ---")
 
@@ -230,6 +644,9 @@ def main():
             ("unsupported", domain)
         ]:
             print(url)
+
+            if reason:
+                print(f"  {reason}")
 
 
 if __name__ == "__main__":
