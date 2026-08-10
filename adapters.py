@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import gzip
 from dataclasses import asdict, dataclass
 from html.parser import HTMLParser
+from io import BytesIO
 from typing import Protocol
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
@@ -20,6 +22,7 @@ class ResolvedContent:
     source_url: str
     title: str | None = None
     content_url: str | None = None
+    content_urls: tuple[str, ...] = ()
     adapter: str | None = None
 
     # Rendering hints for Childsafe.
@@ -139,13 +142,48 @@ def fetch_html(
                     f"{content_type}"
                 )
 
+            content_encoding = response.headers.get(
+                "Content-Encoding",
+                "",
+            ).strip().lower()
+
             body = response.read(
                 MAX_HTML_BYTES + 1
             )
 
             if len(body) > MAX_HTML_BYTES:
                 raise ResolveError(
-                    "HTML document is too large."
+                    "Compressed HTML document is too large."
+                )
+
+            if content_encoding == "gzip":
+                try:
+                    with gzip.GzipFile(
+                        fileobj=BytesIO(body)
+                    ) as gz:
+                        body = gz.read(
+                            MAX_HTML_BYTES + 1
+                        )
+
+                except OSError as exc:
+                    raise ResolveError(
+                        "Could not decompress gzip HTML: "
+                        f"{exc}"
+                    ) from exc
+
+                if len(body) > MAX_HTML_BYTES:
+                    raise ResolveError(
+                        "Decompressed HTML document "
+                        "is too large."
+                    )
+
+            elif content_encoding not in {
+                "",
+                "identity",
+            }:
+                raise ResolveError(
+                    "Unsupported Content-Encoding: "
+                    f"{content_encoding}"
                 )
 
     except ResolveError:
@@ -180,7 +218,10 @@ class BasicHTMLParser(HTMLParser):
             self.in_title = True
 
         elif tag == "iframe":
-            src = attrs.get("src")
+            src = (
+                attrs.get("src")
+                or attrs.get("data-lazy-src")
+            )
 
             if src:
                 self.iframes.append(src)
@@ -350,6 +391,9 @@ class GenericWordwallPageAdapter:
 
         "testsaati.com",
         "www.testsaati.com",
+
+        "ilkokulevim.com",
+        "www.ilkokulevim.com",
     }
 
     WORDWALL_HOSTS = {
@@ -377,6 +421,8 @@ class GenericWordwallPageAdapter:
         parser = BasicHTMLParser()
         parser.feed(document)
 
+        candidates: list[str] = []
+
         for raw_src in parser.iframes:
             candidate = urljoin(
                 final_url,
@@ -400,22 +446,42 @@ class GenericWordwallPageAdapter:
             if "/embed/" not in candidate_path:
                 continue
 
+            if candidate not in candidates:
+                candidates.append(candidate)
+
+        if not candidates:
+            #
+            # The source site itself is supported, but this
+            # particular page is not a Wordwall page.
+            #
+            raise NotApplicable(
+                "No Wordwall embed found."
+            )
+
+        if len(candidates) == 1:
             return ResolvedContent(
                 kind="embed",
                 provider="wordwall",
                 source_url=url,
                 title=parser.title,
-                content_url=candidate,
+                content_url=candidates[0],
+                content_urls=tuple(candidates),
                 adapter=self.name,
+                render_mode="embed",
             )
 
-        #
-        # Important:
-        # The source site itself is supported, but this particular page
-        # isn't a Wordwall page. Let another adapter try it.
-        #
-        raise NotApplicable(
-            "No Wordwall embed found."
+        return ResolvedContent(
+            kind="embed-collection",
+            provider="wordwall",
+            source_url=url,
+            title=parser.title,
+            #
+            # Keep content_url for backward compatibility.
+            #
+            content_url=candidates[0],
+            content_urls=tuple(candidates),
+            adapter=self.name,
+            render_mode="embed-collection",
         )
 
 
