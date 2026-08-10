@@ -1,0 +1,312 @@
+:root {
+    --g-bg: #0d1117;
+    --g-surface: #151b23;
+    --g-surface-soft: #1b2330;
+    --g-border: #2a3342;
+    --g-text: #f5f7fa;
+    --g-muted: #9aa4b2;
+    --g-accent: #58c4f6;
+    --g-accent-ink: #07141c;
+    --g-radius-sm: 10px;
+    --g-radius-md: 14px;
+    --g-radius-lg: 18px;
+    --g-space-1: .35rem;
+    --g-space-2: .65rem;
+    --g-space-3: 1rem;
+    --g-space-4: 1.5rem;
+    --g-space-5: 2rem;
+    --g-space-6: 3rem;
+    --g-content: 42rem;
+    --g-font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html,
+body {
+    background: var(--g-bg) !important;
+    color: var(--g-text) !important;
+    font-family: var(--g-font) !important;
+}
+
+body {
+    margin: 0;
+}
+
+.product-home {
+    width: min(100%, var(--g-content)) !important;
+    min-height: 100dvh;
+    margin: 0 auto;
+    padding: max(1.25rem, env(safe-area-inset-top)) 1.25rem max(2rem, env(safe-area-inset-bottom)) !important;
+    display: block !important;
+}
+
+.product-header {
+    margin-bottom: clamp(2.5rem, 9vh, 5.5rem);
+}
+
+.product-wordmark {
+    color: var(--g-text);
+    text-decoration: none;
+    font-size: 1.05rem;
+    font-weight: 760;
+    letter-spacing: -.025em;
+}
+
+.hero {
+    max-width: 38rem;
+}
+
+.eyebrow {
+    margin: 0 0 .8rem;
+    color: var(--g-muted);
+    font-size: .76rem;
+    font-weight: 720;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.product-home h1 {
+    margin: 0 0 1rem;
+    max-width: 34rem;
+    font-size: clamp(2.25rem, 8vw, 4.5rem) !important;
+    line-height: 1.02 !important;
+    letter-spacing: -.045em !important;
+    font-weight: 760;
+}
+
+.domain-punch {
+    color: var(--g-accent);
+}
+
+.hero-copy {
+    max-width: 35rem;
+    margin: 0 0 1.35rem;
+    color: var(--g-muted);
+    font-size: 1rem;
+    line-height: 1.55;
+}
+
+.product-url-form {
+    max-width: 38rem;
+    padding: .35rem !important;
+    border: 1px solid var(--g-border) !important;
+    border-radius: var(--g-radius-lg) !important;
+    background: var(--g-surface) !important;
+    box-shadow: none !important;
+}
+
+.product-url-form input {
+    background: transparent !important;
+    min-height: 3rem;
+}
+
+.product-url-form input:focus {
+    background: var(--g-surface-soft) !important;
+}
+
+.product-url-form button {
+    background: var(--g-accent) !important;
+    color: var(--g-accent-ink) !important;
+    border-radius: var(--g-radius-md) !important;
+    box-shadow: none !important;
+}
+
+.current-slogan {
+    min-height: 1.3rem;
+    margin: .85rem .2rem 0;
+    color: var(--g-muted);
+    font-size: .86rem;
+}
+
+.manifesto {
+    margin-top: clamp(3.5rem, 10vh, 6.5rem);
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--g-border);
+}
+
+.manifesto h2 {
+    margin: 0 0 1rem;
+    color: var(--g-muted);
+    font-size: .75rem;
+    font-weight: 720;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.manifesto-lead {
+    max-width: 36rem;
+    margin: 0 0 .8rem;
+    color: var(--g-text);
+    font-size: 1.15rem;
+    line-height: 1.48;
+}
+
+.manifesto p:not(.manifesto-lead) {
+    max-width: 36rem;
+    margin: 0;
+    color: var(--g-muted);
+    font-size: .94rem;
+    line-height: 1.62;
+}
+
+.product-footer {
+    margin-top: 4.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--g-border);
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    color: var(--g-muted);
+    font-size: .78rem;
+}
+
+.product-footer a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.product-viewer-toolbar {
+    align-items: center;
+}
+
+.product-viewer-left,
+.product-viewer-actions {
+    align-items: center;
+}
+
+.viewer-brand,
+.viewer-action {
+    min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,.16);
+    background: rgba(13,17,23,.86);
+    color: #fff;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: none;
+}
+
+.viewer-brand {
+    padding: 0 12px;
+    border-radius: 999px;
+    text-decoration: none;
+    font-size: .8rem;
+    font-weight: 760;
+    letter-spacing: -.02em;
+}
+
+.viewer-action {
+    padding: 0 12px;
+    border-radius: 999px;
+    font: inherit;
+    font-size: .78rem;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.share-page {
+    width: min(100%, 28rem) !important;
+    margin: 0 auto;
+    padding: max(2rem, env(safe-area-inset-top)) 1.25rem max(2rem, env(safe-area-inset-bottom)) !important;
+}
+
+.share-card {
+    margin-top: 2rem;
+    padding: 1.25rem;
+    border: 1px solid var(--g-border);
+    border-radius: var(--g-radius-lg);
+    background: var(--g-surface);
+    text-align: center;
+}
+
+.qr-image {
+    width: min(76vw, 260px);
+    height: auto;
+    padding: .75rem;
+    border-radius: var(--g-radius-md);
+    background: #fff;
+}
+
+.short-url {
+    margin: 1rem 0;
+    font-size: 1.05rem;
+    font-weight: 720;
+    letter-spacing: .02em;
+}
+
+.share-actions {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: .6rem;
+}
+
+.toast {
+    position: fixed;
+    left: 50%;
+    bottom: max(1.25rem, env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    z-index: 2147483647;
+    padding: .65rem .85rem;
+    border-radius: 999px;
+    background: rgba(13,17,23,.94);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,.14);
+    font-size: .8rem;
+}
+
+.toast[hidden] {
+    display: none;
+}
+
+@media (max-width: 520px) {
+    .product-home h1 {
+        font-size: clamp(2.25rem, 11vw, 3.35rem) !important;
+    }
+
+    .product-url-form {
+        grid-template-columns: 1fr !important;
+    }
+
+    .product-url-form .url-submit {
+        width: 100%;
+    }
+
+    .manifesto {
+        margin-top: 3.5rem;
+    }
+
+    .product-footer {
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 430px) {
+    .viewer-brand {
+        display: none;
+    }
+
+    .viewer-action {
+        width: 42px;
+        padding: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-indent: -9999px;
+        position: relative;
+    }
+
+    .viewer-action::after {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        text-indent: 0;
+        font-size: 1rem;
+    }
+
+    [data-action="copy"]::after { content: "⧉"; }
+    [data-action="share"]::after { content: "↗"; }
+    [data-action="qr"]::after { content: "▦"; }
+}
