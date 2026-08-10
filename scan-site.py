@@ -4,21 +4,17 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import heapq
 import json
 import time
-from collections import Counter, defaultdict, deque
+from collections import Counter, defaultdict
 from html.parser import HTMLParser
+from itertools import count
 from pathlib import Path
 from urllib.parse import urldefrag, urljoin, urlparse, urlunparse
 from urllib.robotparser import RobotFileParser
 
-from adapters import (
-    NativeGameFingerprintParser,
-    fetch_html,
-    hostname,
-    matching_adapters,
-    resolve_url,
-)
+from adapters import fetch_html, hostname, matching_adapters, resolve_url
 
 
 ASSET_SUFFIXES = {
@@ -28,17 +24,23 @@ ASSET_SUFFIXES = {
     ".woff", ".woff2", ".ttf", ".eot",
 }
 
-GAME_HINTS = (
-    "oyun",
-    "game",
-    "quiz",
-    "test",
-    "hizliokuma",
-    "okuma",
-    "ritmik",
-    "alfabe",
-    "ses-",
-    "1912",
+STRONG_GAME_HINTS = (
+    "oyun", "game", "quiz", "hizli-okuma", "hizliokuma",
+    "carpim", "ritmik", "alfabe", "ezberleme", "mini-zeka",
+)
+
+WEAK_GAME_HINTS = (
+    "test", "soru", "etkinlik", "okuma",
+)
+
+LOW_VALUE_PATH_HINTS = (
+    "/login", "/odev/", "/tools-1912/", "/sinifim/",
+    "/test-coz/", "/ogrenci-takip",
+)
+
+TRACKER_RESOURCE_HINTS = (
+    "googletagmanager.com", "googlesyndication.com", "doubleclick.net",
+    "google-analytics.com", "cloudflareinsights.com",
 )
 
 
@@ -95,12 +97,7 @@ def canonical_url(url: str) -> str:
     parsed = urlparse(clean)
     path = parsed.path or "/"
     return urlunparse((
-        parsed.scheme.lower(),
-        parsed.netloc.lower(),
-        path,
-        "",
-        "",
-        "",
+        parsed.scheme.lower(), parsed.netloc.lower(), path, "", "", "",
     ))
 
 
@@ -110,27 +107,58 @@ def is_html_candidate(url: str, allowed_hosts: set[str]) -> bool:
         return False
     if (parsed.hostname or "").lower() not in allowed_hosts:
         return False
-
-    suffix = Path(parsed.path).suffix.lower()
-    return suffix not in ASSET_SUFFIXES
+    return Path(parsed.path).suffix.lower() not in ASSET_SUFFIXES
 
 
-def looks_game_like(url: str, parser: DiscoveryParser) -> bool:
+def crawl_priority(url: str) -> int:
+    value = url.lower()
+    score = 0
+    score += 12 * sum(hint in value for hint in STRONG_GAME_HINTS)
+    score += 2 * sum(hint in value for hint in WEAK_GAME_HINTS)
+    score -= 15 * sum(hint in value for hint in LOW_VALUE_PATH_HINTS)
+    return score
+
+
+def game_score(url: str, parser: DiscoveryParser) -> tuple[int, list[str]]:
     value = (url + " " + (parser.title or "")).lower()
+    ids = parser.ids
+    classes = parser.classes
+    reasons: list[str] = []
+    score = 0
 
-    if any(hint in value for hint in GAME_HINTS):
-        return True
+    strong = [hint for hint in STRONG_GAME_HINTS if hint in value]
+    weak = [hint for hint in WEAK_GAME_HINTS if hint in value]
+    low_value = [hint for hint in LOW_VALUE_PATH_HINTS if hint in url.lower()]
 
-    game_tokens = {
-        "game", "oyun", "quiz", "question", "questionblock",
-        "soru", "cevap", "cevaplar", "score", "puan",
-        "basla", "start", "result", "sonuc",
-    }
+    if strong:
+        score += 4
+        reasons.append("strong-url-title:" + ",".join(strong[:4]))
+    if weak:
+        score += 1
+        reasons.append("weak-url-title:" + ",".join(weak[:4]))
+    if low_value:
+        score -= 5
+        reasons.append("low-value-path:" + ",".join(low_value[:3]))
 
-    return bool(
-        game_tokens.intersection(parser.ids)
-        or game_tokens.intersection(parser.classes)
-    )
+    tokens = ids | classes
+
+    if {"questionblock", "cevaplar"}.issubset(tokens):
+        score += 5
+        reasons.append("dom:questionblock+cevaplar")
+    if ({"soru", "cevap"}.issubset(tokens) or {"soru", "cevaplar"}.issubset(tokens)):
+        score += 4
+        reasons.append("dom:soru+cevap")
+    if ({"score", "start"}.issubset(tokens) or {"puan", "basla"}.issubset(tokens)):
+        score += 4
+        reasons.append("dom:score+start")
+    if ({"game", "score"}.issubset(tokens) or {"oyun", "puan"}.issubset(tokens)):
+        score += 3
+        reasons.append("dom:game+score")
+    if any(token in tokens for token in {"question", "question-text", "options-container"}):
+        score += 2
+        reasons.append("dom:question-ui")
+
+    return score, reasons
 
 
 def resource_signature(base_url: str, parser: DiscoveryParser) -> tuple[str, list[str]]:
@@ -141,11 +169,20 @@ def resource_signature(base_url: str, parser: DiscoveryParser) -> tuple[str, lis
         parsed = urlparse(absolute)
         if not parsed.hostname:
             continue
-        resources.append(f"{parsed.hostname}{parsed.path}")
+        resource = f"{parsed.hostname}{parsed.path}"
+        if any(hint in resource for hint in TRACKER_RESOURCE_HINTS):
+            continue
+        resources.append(resource)
 
+    stable_tokens = {
+        "game", "oyun", "quiz", "question", "questionblock", "soru",
+        "cevap", "cevaplar", "score", "puan", "start", "basla",
+        "result", "sonuc", "container", "game-container", "game-wrapper",
+        "options-container", "question-text", "sahne1", "sahne2",
+    }
     structural = [
-        *(f"#{value}" for value in sorted(parser.ids)),
-        *(f".{value}" for value in sorted(parser.classes)),
+        *(f"#{value}" for value in sorted(parser.ids) if value in stable_tokens),
+        *(f".{value}" for value in sorted(parser.classes) if value in stable_tokens),
     ]
 
     payload = "\n".join(sorted(set(resources)) + structural).encode("utf-8")
@@ -161,28 +198,36 @@ def build_robots(start_url: str) -> RobotFileParser:
     try:
         parser.read()
     except Exception:
-        # Fail open for robots fetch errors, but remain bounded and rate-limited.
         pass
     return parser
 
 
-def scan(start_url: str, max_pages: int, delay: float) -> dict:
+def scan(
+    start_url: str,
+    max_pages: int,
+    delay: float,
+    min_game_score: int,
+    max_candidates: int | None,
+) -> dict:
     start_url = canonical_url(start_url)
     host = hostname(start_url)
     allowed_hosts = {host}
-    if host.startswith("www."):
-        allowed_hosts.add(host.removeprefix("www."))
-    else:
-        allowed_hosts.add("www." + host)
+    allowed_hosts.add(host.removeprefix("www.") if host.startswith("www.") else "www." + host)
 
     robots = build_robots(start_url)
-    queue = deque([start_url])
+    sequence = count()
+    queue: list[tuple[int, int, str]] = []
+    heapq.heappush(queue, (-1000, next(sequence), start_url))
     queued = {start_url}
     visited: set[str] = set()
     rows: list[dict] = []
+    candidate_count = 0
 
     while queue and len(visited) < max_pages:
-        url = queue.popleft()
+        if max_candidates is not None and candidate_count >= max_candidates:
+            break
+
+        _, _, url = heapq.heappop(queue)
         if url in visited:
             continue
         visited.add(url)
@@ -192,16 +237,9 @@ def scan(start_url: str, max_pages: int, delay: float) -> dict:
             continue
 
         try:
-            final_url, document = fetch_html(
-                url,
-                allowed_hosts=allowed_hosts,
-            )
+            final_url, document = fetch_html(url, allowed_hosts=allowed_hosts)
         except Exception as exc:
-            rows.append({
-                "url": url,
-                "status": "fetch-error",
-                "error": str(exc),
-            })
+            rows.append({"url": url, "status": "fetch-error", "error": str(exc)})
             time.sleep(delay)
             continue
 
@@ -215,24 +253,32 @@ def scan(start_url: str, max_pages: int, delay: float) -> dict:
             if not is_html_candidate(candidate, allowed_hosts):
                 continue
             queued.add(candidate)
-            queue.append(candidate)
+            heapq.heappush(
+                queue,
+                (-crawl_priority(candidate), next(sequence), candidate),
+            )
 
-        if not looks_game_like(final_url, parser):
+        score, reasons = game_score(final_url, parser)
+        if score < min_game_score:
             rows.append({
                 "url": final_url,
                 "title": parser.title,
                 "status": "non-game",
+                "game_score": score,
+                "game_reasons": reasons,
             })
             time.sleep(delay)
             continue
 
+        candidate_count += 1
         signature, resources = resource_signature(final_url, parser)
         adapters = matching_adapters(final_url)
-
         row = {
             "url": final_url,
             "title": parser.title,
             "status": "candidate",
+            "game_score": score,
+            "game_reasons": reasons,
             "matching_adapters": adapters,
             "family_signature": signature,
             "resources": resources,
@@ -268,10 +314,7 @@ def scan(start_url: str, max_pages: int, delay: float) -> dict:
     families = []
     for signature, members in family_members.items():
         statuses = Counter(member["status"] for member in members)
-        adapters = Counter(
-            member.get("adapter") or "unresolved"
-            for member in members
-        )
+        adapters = Counter(member.get("adapter") or "unresolved" for member in members)
         families.append({
             "signature": signature,
             "count": len(members),
@@ -279,14 +322,16 @@ def scan(start_url: str, max_pages: int, delay: float) -> dict:
             "adapters": dict(adapters),
             "representative_url": members[0]["url"],
             "representative_title": members[0].get("title"),
+            "max_game_score": max(member.get("game_score", 0) for member in members),
         })
 
-    families.sort(key=lambda item: (-item["count"], item["signature"]))
+    families.sort(key=lambda item: (-item["count"], -item["max_game_score"], item["signature"]))
 
     return {
         "start_url": start_url,
         "visited_pages": len(visited),
         "queued_pages": len(queued),
+        "candidate_pages": candidate_count,
         "counts": dict(Counter(row["status"] for row in rows)),
         "families": families,
         "pages": rows,
@@ -299,11 +344,19 @@ def main() -> int:
     )
     parser.add_argument("start_url")
     parser.add_argument("--max-pages", type=int, default=200)
+    parser.add_argument("--max-candidates", type=int)
+    parser.add_argument("--min-game-score", type=int, default=4)
     parser.add_argument("--delay", type=float, default=0.25)
     parser.add_argument("--output", default="site-scan.json")
     args = parser.parse_args()
 
-    report = scan(args.start_url, args.max_pages, args.delay)
+    report = scan(
+        args.start_url,
+        args.max_pages,
+        args.delay,
+        args.min_game_score,
+        args.max_candidates,
+    )
 
     output = Path(args.output)
     output.write_text(
@@ -311,19 +364,20 @@ def main() -> int:
         encoding="utf-8",
     )
 
-    print(f"Visited : {report['visited_pages']}")
-    print(f"Queued  : {report['queued_pages']}")
-    for status, count in sorted(report["counts"].items()):
-        print(f"{status:22} {count}")
+    print(f"Visited    : {report['visited_pages']}")
+    print(f"Queued     : {report['queued_pages']}")
+    print(f"Candidates : {report['candidate_pages']}")
+    for status, count_value in sorted(report["counts"].items()):
+        print(f"{status:22} {count_value}")
 
     print("\nFamilies:")
     for family in report["families"][:30]:
         status_text = ", ".join(
-            f"{key}={value}"
-            for key, value in sorted(family["statuses"].items())
+            f"{key}={value}" for key, value in sorted(family["statuses"].items())
         )
         print(
             f"{family['signature']}  {family['count']:4}  "
+            f"score={family['max_game_score']:2}  "
             f"{status_text}  {family['representative_url']}"
         )
 
