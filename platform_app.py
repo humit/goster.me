@@ -18,7 +18,7 @@ from security import validate_public_origin
 SANDBOX_ORIGIN = validate_public_origin(
     os.environ.get(
         "GOSTER_SANDBOX_ORIGIN",
-        "https://sandbox.goster.me",
+        "https://s.goster.me",
     )
 )
 
