@@ -1,302 +1,120 @@
 # goster.me Security Architecture
 
-This document defines the security model and invariants for the public goster.me service.
-It is intended to remain valid while adapters and rendering code are refactored.
+This document describes the security model of the public `goster.me` service at a level intended for maintainers and external reviewers. Operational secrets, exact deployment values, internal routes, timing parameters and host-specific details are intentionally omitted.
 
 ## Security goals
 
-The service accepts URLs supplied by untrusted users and fetches content from third-party
-sites. The primary goals are:
+`goster.me` accepts user-supplied URLs and may retrieve content from third-party sites. The design therefore assumes that submitted URLs and remote content are untrusted.
 
-1. Never allow a submitted URL to turn goster.me into an SSRF proxy.
-2. Never execute third-party HTML or JavaScript with the primary `goster.me` origin.
-3. Prefer clean provider embeds over source-page execution.
-4. When source-page execution is unavoidable, run it only behind the dedicated sandbox
-   origin and browser sandbox restrictions.
-5. Fail closed for unknown or unsupported content.
-6. Bound storage and process resource consumption.
-7. Avoid exposing unnecessary analytics, advertising, server-version or application data.
+The core goals are:
 
-## Trust boundaries
+- prevent server-side request abuse;
+- never execute third-party HTML or JavaScript with the authority of the primary `goster.me` origin;
+- prefer provider-supported clean embeds whenever possible;
+- isolate native third-party applications behind a separate security origin when no clean embed exists;
+- fail closed for unknown or unsupported content;
+- limit storage and process resource consumption;
+- minimize tracking, advertising and unnecessary information disclosure.
+
+## High-level trust model
 
 ```text
-Internet / submitted URL
-        |
-        v
-+-------------------------+
-| URL + redirect security |
-| security.py             |
-+-------------------------+
-        |
-        v
-+-------------------------+
-| adapters / discovery    |
-| classify only           |
-+-------------------------+
-        |
-        +---------------- clean embed ----------------+
-        |                                              |
-        v                                              v
- render_mode=isolate                            render_mode=embed
-        |                                              |
-        v                                              v
-+-------------------------+                    primary shell
-| short-link database     |                           |
-+-------------------------+                           v
-        |                                         provider iframe
-        v
-primary `goster.me/<code>`
-        |
-        | short-lived signed capability URL
-        v
-`s.goster.me/v/<code>?exp=...&sig=...`
-        |
-        v
-third-party HTML/JS in browser sandbox
+user URL
+   |
+   v
+central URL / redirect validation
+   |
+   v
+content classification
+   |
+   +---- clean provider embed ----> primary product shell
+   |
+   +---- native page content -----> isolated origin + browser sandbox
 ```
 
-The dedicated sandbox origin is a security boundary, not a cosmetic subdomain. The short
-hostname `s.goster.me` is only a name; security does not depend on obscurity.
+The isolated origin is a security boundary, not a cosmetic subdomain. Its hostname is deliberately not treated as a secret and does not provide authorization by itself.
 
-## URL and network security
+## URL and network controls
 
-`security.py` owns URL/network validation. Adapters must not implement weaker parallel
-fetch logic.
+All remote fetching must pass through centralized validation. Site adapters must not introduce weaker parallel fetch paths.
 
-Current rules include:
-
-- HTTP and HTTPS only.
-- Hostname required.
-- Credentials in URLs rejected.
-- Raw IPv4/IPv6 literals rejected.
-- Non-standard ports rejected.
-- URL length bounded.
-- Redirect destinations validated before they are opened.
-- Adapter fetches use explicit host allowlists.
-- YouTube IDs are strictly validated.
-
-Unknown content must result in a generic public error rather than falling back to remote
-HTML execution.
+The implementation applies scheme, host, redirect and destination validation and uses explicit source allowlists. Unsupported content does not fall back to arbitrary remote HTML execution.
 
 ## Rendering policy
 
-Rendering modes are deliberately few and explicit.
+There are two preferred rendering paths:
 
-### Clean embeds
+1. **Clean embed** — use a provider-supported embed when available.
+2. **Isolated native content** — when an activity exists only inside a source page, classify it as isolated content and render it through the dedicated isolation service.
 
-If a provider exposes a clean embed URL, use it instead of source-page isolation.
-Examples include YouTube and Wordwall.
+Adapters classify content and identify the relevant activity. They do not grant browser privileges.
 
-### Isolated native content
+## Isolation boundary
 
-Some educational sites implement activities directly in their source page and provide no
-clean embed. An adapter may classify these as:
+Third-party source HTML is never served as same-origin content from the primary application.
 
-```text
-render_mode = isolate
-selector = <known activity root>
-```
+The isolation service is deliberately narrow:
 
-Adapters only identify the content and activity root. They do not grant additional browser
-privileges.
+- it serves only previously classified isolated content;
+- it has read-only access to the short-link store;
+- it cannot create or modify application data;
+- it reuses the central URL and redirect validation path;
+- it removes known advertising and analytics execution where practical;
+- it is framed only by the primary product origin;
+- it does not expose a general resolver or arbitrary file-serving interface.
 
-## Sandbox origin
+Access to isolated content requires a short-lived signed capability produced by the primary service. The capability is intentionally time-bounded and is not a substitute for end-user authentication.
 
-Third-party source HTML is served only from `s.goster.me`, never from the primary origin.
+## Browser sandboxing
 
-The sandbox service:
+Isolated documents run inside browser sandbox restrictions in addition to being placed on a separate origin.
 
-- binds to loopback behind Caddy;
-- opens the short-link SQLite database read-only;
-- only serves live records whose `render_mode` is `isolate`;
-- does not increment access counters or mutate storage;
-- fetches source HTML through the same redirect/host validation as the primary service;
-- strips known analytics/advertising execution blocks before browser parsing;
-- emits `Cache-Control: no-store`;
-- hides Python version information;
-- exposes no general resolver, static-file or write endpoint.
+A critical invariant is that isolated third-party content must not regain same-origin authority with the primary application. Changes that weaken this boundary require a dedicated security review.
 
-### Signed capability URLs
+Content Security Policy and related browser controls further restrict framing, forms, plugins and other capabilities.
 
-A bare URL such as:
+## Privacy and information minimization
 
-```text
-https://s.goster.me/v/abc346
-```
+The system removes known advertising and analytics execution from isolated content where practical. Public responses also avoid unnecessary backend implementation and version disclosure.
 
-is not sufficient to access sandbox content.
+These are defense-in-depth and privacy measures. They do not replace origin separation or browser sandboxing.
 
-The primary service generates a short-lived HMAC-SHA256 capability URL:
+## Storage and process controls
 
-```text
-https://s.goster.me/v/abc346?exp=<unix-time>&sig=<hmac>
-```
+Application storage is bounded using row, payload and database-growth controls, with periodic maintenance of expired data.
 
-The signature binds the short code and expiry time. The sandbox rejects missing, invalid,
-expired, duplicated or unexpected query parameters. Capability lifetime is bounded to ten
-minutes.
+Application processes run as a non-root service identity with restrictive systemd hardening and explicit CPU, memory, task and file-descriptor limits. Public traffic terminates at the reverse proxy; application listeners are not intended to be directly Internet-accessible.
 
-Both services use the same secret from:
+## Adapter refactor invariants
 
-```text
-GOSTER_SANDBOX_SIGNING_KEY
-```
+Future adapter modularization must preserve the following rules:
 
-The key must contain at least 32 bytes and must not be committed to the repository.
-The primary service fails closed if it cannot sign an isolate URL.
+1. adapters classify and discover content but do not bypass centralized network validation;
+2. clean embeds are preferred to source-page isolation;
+3. unknown content fails closed;
+4. isolated content is rendered only through the dedicated isolation origin;
+5. third-party HTML/JavaScript is never served with the primary origin's authority;
+6. isolated browser content must not receive same-origin privileges with the primary application;
+7. the isolation service remains read-only with respect to application storage;
+8. direct knowledge of an isolated content identifier is not sufficient for access;
+9. security regression tests must remain green when adapters are added, removed or reorganized.
 
-A signed URL is a bearer capability. Someone who obtains a valid URL can replay it until it
-expires. The purpose is to prevent direct guessing/enumeration and accidental exposure of
-bare sandbox routes, not to authenticate end users.
+## Deployment principles
 
-### Browser-level sandbox
+Production deployments should verify that:
 
-The primary page embeds sandbox content with an iframe sandbox that intentionally omits
-`allow-same-origin`:
+- the primary and isolation services use the intended shared security configuration;
+- application listeners remain private behind the reverse proxy;
+- direct unsigned isolation access is rejected;
+- signed isolated content works only in the intended framing context;
+- browser sandbox and CSP restrictions remain active;
+- advertising/analytics stripping remains effective for supported sources;
+- the full security regression suite passes before traffic is switched.
 
-```text
-sandbox="allow-scripts allow-modals allow-pointer-lock allow-presentation"
-```
+Exact production paths, secrets, port assignments, signing formats and timing values belong in deployment configuration rather than this public architecture document.
 
-Do not add `allow-same-origin` without a separate security review.
+## Known limitations
 
-The sandbox response also emits a CSP sandbox directive and restricts framing to the
-primary origin:
+Some legacy third-party applications require permissive script behavior within the isolated document. This is tolerated only because they remain separated from the primary origin and constrained by browser sandboxing.
 
-```text
-frame-ancestors https://goster.me
-sandbox allow-scripts allow-modals allow-pointer-lock allow-presentation
-object-src 'none'
-form-action 'none'
-```
-
-The sandbox must not emit `X-Frame-Options: DENY`, because legitimate cross-origin framing
-by `goster.me` is required.
-
-When browsers send `Sec-Fetch-Dest`, the sandbox only accepts `iframe`. This prevents normal
-top-level browser navigation. This header is defense-in-depth only; the HMAC capability is
-the authorization control because arbitrary HTTP clients can forge request headers.
-
-## Primary-origin policy
-
-The primary origin owns product UI, short links, share/QR controls and clean embed shells.
-It must never serve third-party source HTML or JavaScript as same-origin content.
-
-The primary service emits security headers and Caddy applies the public CSP and removes
-backend-identifying headers.
-
-The current primary CSP is transitional because legacy rendering still contains inline
-scripts/styles. A future hardening pass should move these to external files or use
-nonces/hashes so `unsafe-inline` can be removed.
-
-## Privacy filtering
-
-Isolation protects the primary origin, but third-party analytics and advertising are also
-unnecessary for the product goal. Before isolated HTML reaches the browser, known execution
-blocks for Google Tag Manager, Google Analytics, AdSense/Google Syndication and DoubleClick
-are removed.
-
-This is a hygiene/privacy layer, not the main security boundary. The browser sandbox and
-origin separation remain mandatory even if filtering is expanded.
-
-## Storage controls
-
-Short-link storage uses defense-in-depth limits:
-
-- maximum row count;
-- lower target row count for LRU trimming;
-- per-payload UTF-8 byte limit;
-- SQLite `max_page_count` applied on every application SQLite connection;
-- periodic maintenance for expiry and trimming.
-
-SQLite `max_page_count` is a connection/runtime guard. It is not a persistent database
-header setting and is not an operating-system filesystem quota.
-
-Automatic `VACUUM` is intentionally avoided in maintenance because it can temporarily
-increase disk and I/O usage.
-
-## Process isolation and resource limits
-
-Systemd units use loopback listeners and restrictive service settings including:
-
-- dedicated non-root `gosterme` user;
-- `NoNewPrivileges=true`;
-- `ProtectSystem=strict`;
-- `ProtectHome=true`;
-- capability bounding set removed;
-- private temporary/device namespaces;
-- kernel/control-group protections;
-- address-family restrictions;
-- memory, task, file-descriptor and CPU limits.
-
-The sandbox unit has read-only access to `/var/lib/goster.me`.
-
-## Reverse proxy / DNS
-
-Public TLS terminates at Caddy. Application listeners remain on `127.0.0.1`.
-
-Expected public routing:
-
-```text
-goster.me    -> Caddy -> 127.0.0.1:8090
-s.goster.me  -> Caddy -> 127.0.0.1:8092
-```
-
-Only Caddy should be reachable from the Internet. Ports 8090/8092 must not be exposed by
-firewall/security-group rules.
-
-## Security invariants for adapter refactors
-
-Adapter modularization must preserve these invariants:
-
-1. Adapters classify/discover content; they do not bypass centralized URL validation.
-2. Clean embeds are preferred to source-page isolation.
-3. Unknown content fails closed.
-4. `render_mode=isolate` is rendered only through the dedicated sandbox origin.
-5. Third-party HTML/JS is never served from `goster.me`.
-6. Sandbox iframe privileges never include `allow-same-origin`.
-7. Sandbox records are read-only and must be live isolate records.
-8. Bare sandbox short codes are not public capabilities; a valid short-lived signature is
-   required.
-9. Security tests must remain green before site adapters are added, removed or reorganized.
-
-## Deployment checklist
-
-Before enabling the sandbox publicly:
-
-1. Generate a strong signing key, for example:
-
-   ```bash
-   openssl rand -hex 32
-   ```
-
-2. Store it only in `/etc/goster.me/gosterme.env`:
-
-   ```text
-   GOSTER_SANDBOX_SIGNING_KEY=<generated-secret>
-   GOSTER_SANDBOX_ORIGIN=https://s.goster.me
-   ```
-
-3. Ensure both main and sandbox services read the same environment file.
-4. Confirm 8090 and 8092 listen only on loopback.
-5. Validate and reload Caddy before changing the main service entrypoint.
-6. Confirm a bare sandbox `/v/<code>` returns 404.
-7. Confirm an invalid/expired signature returns 404.
-8. Confirm a signed iframe URL returns 200.
-9. Confirm browser top-level navigation to a signed sandbox URL is rejected when
-   `Sec-Fetch-Dest: document` is present.
-10. Confirm CSP has no `allow-same-origin` sandbox privilege.
-11. Confirm known advertising/analytics script URLs are absent from isolated output.
-12. Run the full regression suite.
-
-## Known limitations and future work
-
-- Signed sandbox URLs are replayable until their short expiry.
-- The sandbox CSP permits broad HTTPS dependencies because native educational apps may rely
-  on external assets. Per-adapter dependency allowlists could tighten this later.
-- `unsafe-inline` / `unsafe-eval` may be necessary for legacy third-party native apps inside
-  the sandbox. These permissions are acceptable only because the document is origin-separated
-  and browser-sandboxed.
-- The primary CSP should eventually remove `unsafe-inline` after UI scripts/styles are
-  externalized or nonce/hash based.
-- Storage byte limits are application/SQLite controls rather than filesystem quotas.
+The primary application's CSP can be tightened further as legacy inline assets are removed. Storage limits are application-level safeguards rather than a replacement for operating-system or filesystem quotas.
