@@ -39,7 +39,10 @@ app.hardened_resolve_url = resolve_with_sandbox
 def render_sandbox_shell(code: str, item) -> str:
     title = app.legacy.clean_title(item.title)
     query = signed_query(code)
-    sandbox_url = f"{SANDBOX_ORIGIN}/v/{app.escape(code)}?{query}"
+    sandbox_url = app.escape(
+        f"{SANDBOX_ORIGIN}/v/{code}?{query}",
+        quote=True,
+    )
 
     return app.product_document(
         title,
