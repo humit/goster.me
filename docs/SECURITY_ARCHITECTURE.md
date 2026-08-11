@@ -49,13 +49,14 @@ primary `goster.me/<code>`
         |
         | short-lived signed capability URL
         v
-`sandbox.goster.me/v/<code>?exp=...&sig=...`
+`s.goster.me/v/<code>?exp=...&sig=...`
         |
         v
 third-party HTML/JS in browser sandbox
 ```
 
-The dedicated sandbox origin is a security boundary, not a cosmetic subdomain.
+The dedicated sandbox origin is a security boundary, not a cosmetic subdomain. The short
+hostname `s.goster.me` is only a name; security does not depend on obscurity.
 
 ## URL and network security
 
@@ -101,8 +102,7 @@ privileges.
 
 ## Sandbox origin
 
-Third-party source HTML is served only from `sandbox.goster.me`, never from the primary
-origin.
+Third-party source HTML is served only from `s.goster.me`, never from the primary origin.
 
 The sandbox service:
 
@@ -121,7 +121,7 @@ The sandbox service:
 A bare URL such as:
 
 ```text
-https://sandbox.goster.me/v/abc346
+https://s.goster.me/v/abc346
 ```
 
 is not sufficient to access sandbox content.
@@ -129,7 +129,7 @@ is not sufficient to access sandbox content.
 The primary service generates a short-lived HMAC-SHA256 capability URL:
 
 ```text
-https://sandbox.goster.me/v/abc346?exp=<unix-time>&sig=<hmac>
+https://s.goster.me/v/abc346?exp=<unix-time>&sig=<hmac>
 ```
 
 The signature binds the short code and expiry time. The sandbox rejects missing, invalid,
@@ -238,8 +238,8 @@ Public TLS terminates at Caddy. Application listeners remain on `127.0.0.1`.
 Expected public routing:
 
 ```text
-goster.me          -> Caddy -> 127.0.0.1:8090
-sandbox.goster.me  -> Caddy -> 127.0.0.1:8092
+goster.me    -> Caddy -> 127.0.0.1:8090
+s.goster.me  -> Caddy -> 127.0.0.1:8092
 ```
 
 Only Caddy should be reachable from the Internet. Ports 8090/8092 must not be exposed by
@@ -274,7 +274,7 @@ Before enabling the sandbox publicly:
 
    ```text
    GOSTER_SANDBOX_SIGNING_KEY=<generated-secret>
-   GOSTER_SANDBOX_ORIGIN=https://sandbox.goster.me
+   GOSTER_SANDBOX_ORIGIN=https://s.goster.me
    ```
 
 3. Ensure both main and sandbox services read the same environment file.
