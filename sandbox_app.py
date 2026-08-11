@@ -116,7 +116,8 @@ class Handler(BaseHTTPRequestHandler):
     def end_headers(self) -> None:
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("X-Frame-Options", "DENY")
+        # Do not emit X-Frame-Options here: this response must be framed by
+        # goster.me. frame-ancestors below is the authoritative allowlist.
         self.send_header(
             "Permissions-Policy",
             "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=()",
