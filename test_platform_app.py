@@ -35,6 +35,10 @@ class PlatformSandboxTests(unittest.TestCase):
         self.assertIn("sandbox=\"allow-scripts allow-modals allow-pointer-lock allow-presentation\"", page)
         self.assertNotIn("allow-same-origin", page)
 
+    def test_server_header_does_not_expose_python_version(self):
+        self.assertEqual(platform_app.Handler.server_version, "goster.me")
+        self.assertEqual(platform_app.Handler.sys_version, "")
+
 
 if __name__ == "__main__":
     unittest.main()
