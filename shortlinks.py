@@ -162,6 +162,16 @@ class ShortLinkStore:
         return ResolvedContent(**data)
 
     def _enforce_row_quota(self, db: sqlite3.Connection, timestamp: int) -> None:
+        rows = int(
+            db.execute("SELECT COUNT(*) FROM short_links").fetchone()[0]
+        )
+
+        if rows < self.max_rows:
+            return
+
+        # Only pay the cost of expiry cleanup when the row ceiling is actually
+        # reached. Normal writes keep their previous semantics, while an abuse
+        # burst cannot grow the table past the configured ceiling.
         db.execute(
             "DELETE FROM short_links WHERE expires_at <= ?",
             (timestamp,),
