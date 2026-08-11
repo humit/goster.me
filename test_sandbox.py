@@ -89,6 +89,35 @@ class SandboxStoreTests(unittest.TestCase):
                 sandbox_app.load_item_readonly("../../etc/passwd", now=120)
             )
 
+    def test_strips_known_external_tracking_scripts(self):
+        html = '''
+        <script src="https://www.googletagmanager.com/gtag/js?id=G-TEST"></script>
+        <script src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+        <script src="https://example.com/game.js"></script>
+        '''
+
+        cleaned = sandbox_app.strip_known_tracking_html(html)
+
+        self.assertNotIn("googletagmanager.com", cleaned)
+        self.assertNotIn("googlesyndication.com", cleaned)
+        self.assertIn("https://example.com/game.js", cleaned)
+
+    def test_strips_inline_gtag_bootstrap(self):
+        html = '''
+        <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('config', 'G-TEST');
+        </script>
+        <script>window.gameStarted = true;</script>
+        '''
+
+        cleaned = sandbox_app.strip_known_tracking_html(html)
+
+        self.assertNotIn("dataLayer", cleaned)
+        self.assertNotIn("gtag(", cleaned)
+        self.assertIn("window.gameStarted = true", cleaned)
+
 
 if __name__ == "__main__":
     unittest.main()
