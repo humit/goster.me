@@ -10,12 +10,13 @@ import time
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import adapters
 import public_app as legacy
 
 from adapters import ResolvedContent
+from sandbox_auth import verify
 from security import call_with_redirect_allowlist, safe_urlopen
 from shortlinks import SHORT_CODE_ALPHABET, SHORT_CODE_LENGTH
 
@@ -157,6 +158,21 @@ def load_item_readonly(
     return item
 
 
+def valid_capability_query(code: str, query: str) -> bool:
+    values = parse_qs(query, keep_blank_values=True)
+
+    if set(values) != {"exp", "sig"}:
+        return False
+
+    if len(values["exp"]) != 1 or len(values["sig"]) != 1:
+        return False
+
+    try:
+        return verify(code, values["exp"][0], values["sig"][0])
+    except RuntimeError:
+        return False
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "goster-sandbox"
     sys_version = ""
@@ -164,6 +180,7 @@ class Handler(BaseHTTPRequestHandler):
     def end_headers(self) -> None:
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cross-Origin-Resource-Policy", "same-site")
         # Do not emit X-Frame-Options here: this response must be framed by
         # goster.me. frame-ancestors below is the authoritative allowlist.
         self.send_header(
@@ -204,7 +221,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
 
-        if parsed.query or parsed.fragment:
+        if parsed.fragment:
             self.send_error(404)
             return
 
@@ -215,6 +232,20 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         code = parts[1].lower()
+
+        if not valid_code(code) or not valid_capability_query(code, parsed.query):
+            self.send_error(404)
+            return
+
+        # Real browsers disclose top-level navigation as "document" and an
+        # iframe navigation as "iframe". Reject browser top-level access when
+        # this signal is present. The signed capability URL remains the actual
+        # authorization control because HTTP clients can forge this header.
+        fetch_dest = self.headers.get("Sec-Fetch-Dest", "").strip().lower()
+        if fetch_dest and fetch_dest != "iframe":
+            self.send_error(404)
+            return
+
         item = load_item_readonly(code)
 
         if item is None:
