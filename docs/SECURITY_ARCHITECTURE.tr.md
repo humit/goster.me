@@ -1,311 +1,136 @@
 # goster.me Güvenlik Mimarisi
 
-Bu belge, public `goster.me` servisinin güvenlik modelini ve korunması gereken mimari kuralları tanımlar. Adapter ve rendering kodları ileride refactor edilse bile burada tarif edilen güvenlik sınırlarının geçerli kalması amaçlanır.
+Bu belge, public `goster.me` servisinin güvenlik modelini maintainer ve dışarıdan inceleyen kişiler için yeterli olacak seviyede anlatır. Operasyonel secret'lar, exact deployment değerleri, internal route'lar, süre parametreleri ve host'a özgü ayrıntılar bilinçli olarak burada yer almaz.
 
 ## Önce teknik olmayan kısa açıklama
 
-`goster.me`, kullanıcının verdiği bir web adresindeki eğitim videosunu, oyunu veya etkinliği mümkün olduğunca temiz ve dikkat dağıtmayan bir biçimde göstermeye çalışır. Bu işin zor tarafı şudur: kaynak site bizim kontrolümüzde değildir. Reklam, takip kodu, üçüncü taraf JavaScript veya beklenmeyen davranışlar içerebilir.
+`goster.me`, kullanıcının verdiği bir web adresindeki eğitim videosunu, oyunu veya etkinliği mümkün olduğunca temiz ve dikkat dağıtmayan biçimde göstermeye çalışır. Kaynak site bizim kontrolümüzde olmadığı için reklam, takip kodu, bozuk JavaScript veya beklenmeyen davranış içerebilir.
 
-Bu nedenle sistem iki farklı yaklaşım kullanır:
-
-- Kaynak sitenin zaten temiz bir embed sürümü varsa, örneğin Wordwall veya YouTube embed'i, doğrudan onu kullanırız.
-- Temiz embed yoksa ve etkinlik kaynak sayfanın kendi HTML/JavaScript'i içinde çalışıyorsa, bu kodu ana `goster.me` alanında çalıştırmayız. Ayrı bir güvenlik alanına göndeririz.
-
-Bu ikinci alan sandbox'tır. Mantıksal olarak şu şekilde düşünülebilir:
-
-```text
-Kullanıcı
-   |
-   v
-goster.me
-   |
-   |  güvenli ürün arayüzü, kısa link, QR, paylaşım
-   |
-   +---------------------------+
-                               |
-                               v
-                           s.goster.me
-                               |
-                               v
-                     üçüncü taraf HTML / JavaScript
-```
-
-Amaç şudur: kaynak sitedeki JavaScript kötü niyetli, bozuk veya aşırı meraklı olsa bile `goster.me`'nin kendi cookie'lerine, local storage'ına, DOM'una veya uygulama yetkilerine sahip olmasın.
-
-Sandbox'ın adının gizli olması bir güvenlik önlemi değildir. `s.goster.me` kısa ve nötr bir isimdir; gerçek güvenlik ayrı origin, kısa ömürlü imzalı erişim URL'si, browser sandbox kuralları, CSP, merkezi URL doğrulama ve read-only storage gibi katmanlardan gelir.
-
-Basit güvenlik prensibimiz şudur:
+Bu yüzden sistem iki temel yol kullanır:
 
 ```text
 Temiz embed varsa      -> temiz embed kullan
-Embed yoksa            -> ayrı sandbox origin'de çalıştır
+Embed yoksa            -> ayrı güvenlik alanında çalıştır
 İçeriği tanımıyorsak   -> çalıştırma, fail closed
 ```
 
+Kaynak sayfanın kendi HTML/JavaScript'ini çalıştırmak gerekiyorsa bu kod ana `goster.me` alanında çalıştırılmaz. Ayrı bir origin ve browser sandbox içinde tutulur. Böylece üçüncü taraf kodu ana uygulamanın cookie, storage, DOM ve origin yetkilerini alamaz.
+
+Bu ayrı origin'in adının kısa veya daha az açıklayıcı olması güvenlik sağlamaz. Güvenlik; origin ayrımı, imzalı ve kısa ömürlü erişim, browser sandbox kuralları, CSP, merkezi URL doğrulama, read-only storage ve process kısıtlarının birlikte uygulanmasından gelir.
+
 ## Güvenlik hedefleri
 
-Servis, güvenilmeyen kullanıcılar tarafından verilen URL'leri kabul eder ve üçüncü taraf sitelerden içerik çeker. Temel hedefler şunlardır:
+`goster.me`, kullanıcı tarafından verilen URL'leri kabul eder ve bazı durumlarda üçüncü taraf içerik çeker. Bu nedenle URL ve remote içerik güvenilmeyen veri olarak kabul edilir.
 
-1. Gönderilen bir URL'nin `goster.me`'yi SSRF proxy'sine dönüştürmesine izin vermemek.
-2. Üçüncü taraf HTML veya JavaScript'i hiçbir zaman ana `goster.me` origin yetkileriyle çalıştırmamak.
-3. Kaynak sayfayı çalıştırmak yerine mümkün olduğunca temiz provider embed'lerini tercih etmek.
-4. Kaynak sayfanın çalıştırılması zorunluysa bunu yalnızca ayrı sandbox origin ve browser sandbox kısıtları altında yapmak.
-5. Bilinmeyen veya desteklenmeyen içerikte fail closed davranmak.
-6. Storage ve process kaynak tüketimini sınırlandırmak.
-7. Gereksiz analytics, reklam, server version ve uygulama bilgisini dışarı vermemek.
+Temel hedefler:
 
-## Güven sınırları
+- server-side request abuse'u engellemek;
+- üçüncü taraf HTML/JavaScript'i hiçbir zaman ana `goster.me` origin yetkileriyle çalıştırmamak;
+- mümkün olduğunda provider'ın temiz embed'ini kullanmak;
+- temiz embed yoksa native uygulamayı ayrı güvenlik origin'inde izole etmek;
+- bilinmeyen ve desteklenmeyen içerikte fail closed davranmak;
+- storage ve process kaynak tüketimini sınırlandırmak;
+- tracking, reklam ve gereksiz bilgi ifşasını azaltmak.
+
+## Yüksek seviyeli güven modeli
 
 ```text
-Internet / kullanıcı tarafından verilen URL
-        |
-        v
-+-------------------------+
-| URL + redirect security |
-| security.py             |
-+-------------------------+
-        |
-        v
-+-------------------------+
-| adapters / discovery    |
-| yalnızca sınıflandırma  |
-+-------------------------+
-        |
-        +---------------- clean embed ----------------+
-        |                                              |
-        v                                              v
- render_mode=isolate                            render_mode=embed
-        |                                              |
-        v                                              v
-+-------------------------+                    primary shell
-| short-link database     |                           |
-+-------------------------+                           v
-        |                                         provider iframe
-        v
-primary `goster.me/<code>`
-        |
-        | kısa ömürlü imzalı capability URL
-        v
-`s.goster.me/v/<code>?exp=...&sig=...`
-        |
-        v
-browser sandbox içinde third-party HTML/JS
+kullanıcı URL'si
+   |
+   v
+merkezi URL / redirect doğrulama
+   |
+   v
+içerik sınıflandırma
+   |
+   +---- temiz provider embed ----> ana ürün shell'i
+   |
+   +---- native sayfa içeriği ----> ayrı origin + browser sandbox
 ```
 
-Ayrı sandbox origin kozmetik bir subdomain değil, gerçek bir güvenlik sınırıdır.
+Ayrı origin kozmetik bir subdomain değil, güvenlik sınırıdır. Hostname tek başına authorization mekanizması değildir.
 
-## URL ve network güvenliği
+## URL ve network kontrolleri
 
-`security.py`, URL ve network doğrulamasının sahibi olmalıdır. Adapter'lar bunun daha zayıf paralel bir sürümünü uygulamamalıdır.
+Tüm remote fetch işlemleri merkezi doğrulamadan geçmelidir. Site adapter'ları daha zayıf paralel fetch yolları oluşturmamalıdır.
 
-Mevcut kurallar:
-
-- Yalnızca HTTP ve HTTPS.
-- Hostname zorunlu.
-- URL içinde kullanıcı adı/parola bilgisi reddedilir.
-- Ham IPv4/IPv6 literal adresleri reddedilir.
-- Standard dışı portlar reddedilir.
-- URL uzunluğu sınırlandırılır.
-- Redirect hedefleri açılmadan önce doğrulanır.
-- Adapter fetch işlemleri explicit host allowlist kullanır.
-- YouTube video ID'leri sıkı biçimde doğrulanır.
-
-Bilinmeyen içerik, remote HTML çalıştırmaya düşmek yerine generic public error ile sonuçlanmalıdır.
+Uygulama scheme, host, redirect ve hedef doğrulaması yapar ve explicit source allowlist kullanır. Desteklenmeyen içerik arbitrary remote HTML execution'a fallback etmez.
 
 ## Rendering politikası
 
-Rendering modları bilinçli olarak az ve explicit tutulur.
+İki tercih edilen rendering yolu vardır:
 
-### Temiz embed'ler
+1. **Clean embed** — provider destekliyorsa doğrudan temiz embed kullanılır.
+2. **Isolated native content** — etkinlik yalnızca kaynak sayfa içinde çalışıyorsa içerik isolate olarak sınıflandırılır ve dedicated isolation service üzerinden gösterilir.
 
-Bir provider temiz embed URL sunuyorsa source-page isolation yerine bu kullanılmalıdır. YouTube ve Wordwall bunun örnekleridir.
+Adapter'ın görevi içeriği sınıflandırmak ve ilgili activity root'u tanımaktır. Adapter browser'a ek yetki vermez.
 
-### İzole native içerik
+## Isolation sınırı
 
-Bazı eğitim siteleri etkinliği doğrudan kaynak sayfanın içinde çalıştırır ve ayrı bir temiz embed sağlamaz. Böyle bir içerik adapter tarafından şu şekilde sınıflandırılabilir:
+Üçüncü taraf source HTML hiçbir zaman primary application'dan same-origin içerik olarak servis edilmez.
 
-```text
-render_mode = isolate
-selector = <bilinen activity root>
-```
+Isolation service bilinçli olarak dar tutulur:
 
-Adapter yalnızca içeriği ve activity root'u tanımlar. Browser'a ek yetki vermez.
+- yalnızca önceden sınıflandırılmış isolate içeriği servis eder;
+- short-link storage'a read-only erişir;
+- application data oluşturamaz veya değiştiremez;
+- merkezi URL ve redirect doğrulama yolunu tekrar kullanır;
+- mümkün olduğunda bilinen reklam ve analytics execution'ını kaldırır;
+- yalnızca primary product origin tarafından frame edilmesi amaçlanır;
+- genel resolver veya arbitrary file-serving interface sunmaz.
 
-## Sandbox origin
+Isolation içeriğine erişim, primary service tarafından üretilen kısa ömürlü imzalı capability gerektirir. Bu mekanizma end-user authentication yerine geçmez.
 
-Üçüncü taraf source HTML yalnızca `s.goster.me` üzerinden servis edilir; ana origin üzerinden asla servis edilmez.
+## Browser sandboxing
 
-Sandbox servisi:
+Isolated document ayrı origin'de olmasının yanında browser sandbox kısıtları içinde de çalışır.
 
-- Caddy arkasında yalnızca loopback'e bind olur;
-- short-link SQLite veritabanını read-only açar;
-- yalnızca canlı ve `render_mode=isolate` olan kayıtları servis eder;
-- access counter artırmaz ve storage değiştirmez;
-- source HTML'i primary service ile aynı redirect/host doğrulamasından geçirerek çeker;
-- browser parse etmeden önce bilinen analytics/reklam execution bloklarını temizler;
-- `Cache-Control: no-store` döner;
-- Python version bilgisini gizler;
-- genel resolver, static-file veya write endpoint sunmaz.
+Kritik invariant şudur: üçüncü taraf isolated content primary application ile same-origin authority elde etmemelidir. Bu sınırı zayıflatan değişiklikler ayrı security review gerektirir.
 
-### İmzalı capability URL'leri
+Content Security Policy ve ilgili browser kontrolleri framing, form, plugin ve diğer yetkileri ayrıca sınırlar.
 
-Şu tip çıplak bir URL sandbox içeriğine erişmek için yeterli değildir:
+## Privacy ve bilgi minimizasyonu
 
-```text
-https://s.goster.me/v/abc346
-```
+Sistem mümkün olduğunda isolated content içindeki bilinen reklam ve analytics execution'ını kaldırır. Public response'lar da gereksiz backend implementation ve version bilgisini dışarı vermemeye çalışır.
 
-Primary service kısa ömürlü HMAC-SHA256 imzalı bir capability URL üretir:
+Bunlar defense-in-depth ve privacy katmanlarıdır; origin separation veya browser sandbox yerine geçmez.
 
-```text
-https://s.goster.me/v/abc346?exp=<unix-time>&sig=<hmac>
-```
+## Storage ve process kontrolleri
 
-İmza short code ve expiry time'a bağlıdır. Sandbox; eksik, hatalı, süresi geçmiş, duplicate veya beklenmeyen query parametrelerini reddeder. Capability ömrü en fazla on dakikadır.
+Application storage row, payload ve database-growth limitleriyle sınırlandırılır; expired data için periodic maintenance uygulanır.
 
-Her iki servis aynı secret'ı kullanır:
+Process'ler non-root service identity ile çalışır ve systemd üzerinden CPU, memory, task ve file-descriptor limitleri ile ek hardening uygulanır. Public traffic reverse proxy üzerinde sonlanır; application listener'ları doğrudan Internet'e açılmamalıdır.
 
-```text
-GOSTER_SANDBOX_SIGNING_KEY
-```
+## Adapter refactor'larında korunması gereken invariants
 
-Key en az 32 byte olmalı ve repoya commit edilmemelidir. Primary service isolate URL imzalayamıyorsa fail closed davranmalıdır.
+İleride yapılacak adapter modularization şu kuralları korumalıdır:
 
-İmzalı URL bir bearer capability'dir. Geçerli URL'yi elde eden biri süresi dolana kadar tekrar kullanabilir. Amaç end-user authentication yapmak değil; çıplak sandbox route'larının tahmin edilmesini, enumerate edilmesini ve yanlışlıkla public capability olmasını engellemektir.
+1. adapter'lar classify/discover eder ama centralized network validation'ı bypass etmez;
+2. clean embed source-page isolation'a tercih edilir;
+3. bilinmeyen içerik fail closed olur;
+4. isolate içerik yalnızca dedicated isolation origin üzerinden render edilir;
+5. third-party HTML/JavaScript primary origin yetkileriyle servis edilmez;
+6. isolated browser content primary application ile same-origin privilege alamaz;
+7. isolation service application storage'a karşı read-only kalır;
+8. yalnızca isolated content identifier'ını bilmek erişim için yeterli değildir;
+9. site adapter'ları eklenirken, silinirken veya yeniden organize edilirken security regression testleri green kalmalıdır.
 
-### Browser seviyesinde sandbox
+## Deployment prensipleri
 
-Primary sayfa sandbox içeriğini iframe ile gömer ve özellikle `allow-same-origin` iznini vermez:
+Production deployment sırasında en azından şunlar doğrulanmalıdır:
 
-```text
-sandbox="allow-scripts allow-modals allow-pointer-lock allow-presentation"
-```
+- primary ve isolation service aynı amaçlanan security configuration'ı kullanıyor;
+- application listener'ları reverse proxy arkasında private kalıyor;
+- doğrudan unsigned isolation access reddediliyor;
+- signed isolate content yalnızca amaçlanan framing bağlamında çalışıyor;
+- browser sandbox ve CSP restriction'ları aktif;
+- desteklenen kaynaklarda reklam/analytics stripping devam ediyor;
+- traffic switch öncesi full security regression suite geçiyor.
 
-Ayrı bir security review yapılmadan `allow-same-origin` eklenmemelidir.
+Exact production path'leri, secret'lar, port assignment'ları, signing formatı ve timing değerleri public architecture dokümanı yerine deployment configuration içinde tutulmalıdır.
 
-Sandbox response ayrıca CSP sandbox directive'i döner ve framing'i primary origin ile sınırlar:
+## Bilinen sınırlamalar
 
-```text
-frame-ancestors https://goster.me
-sandbox allow-scripts allow-modals allow-pointer-lock allow-presentation
-object-src 'none'
-form-action 'none'
-```
+Bazı legacy third-party uygulamalar isolated document içinde daha permissive script davranışı gerektirebilir. Bu yalnızca primary origin'den ayrıldıkları ve browser sandbox ile sınırlandıkları için kabul edilebilir.
 
-Sandbox `X-Frame-Options: DENY` göndermemelidir; çünkü `goster.me` tarafından cross-origin iframe olarak gömülmesi meşru kullanımın parçasıdır.
-
-Browser `Sec-Fetch-Dest` gönderiyorsa sandbox yalnızca `iframe` değerini kabul eder. Bu normal top-level browser navigation'ını engeller. Bu header yalnızca defense-in-depth katmanıdır; HTTP client bunu taklit edebileceğinden esas erişim kontrolü HMAC capability'dir.
-
-## Primary-origin politikası
-
-Primary origin ürün UI'sini, kısa linkleri, share/QR kontrollerini ve clean embed shell'lerini barındırır. Üçüncü taraf source HTML veya JavaScript hiçbir zaman same-origin içerik olarak buradan servis edilmemelidir.
-
-Primary service security header'ları döner; Caddy public CSP'yi uygular ve backend kimliği açığa çıkaran header'ları kaldırır.
-
-Mevcut primary CSP geçiş niteliğindedir çünkü legacy rendering hâlâ inline script/style içerir. İleride bunlar external file'a taşınmalı veya nonce/hash kullanılmalı; böylece `unsafe-inline` kaldırılmalıdır.
-
-## Privacy filtering
-
-Origin isolation ana origin'i korur, fakat üçüncü taraf analytics ve reklam kodları ürün amacı için gereksizdir. İzole HTML browser'a ulaşmadan önce şu bilinen execution blokları kaldırılır:
-
-- Google Tag Manager
-- Google Analytics
-- AdSense / Google Syndication
-- DoubleClick
-
-Bu bir hygiene/privacy katmanıdır; ana güvenlik sınırı değildir. Filtering genişletilse bile browser sandbox ve origin separation zorunlu kalır.
-
-## Storage kontrolleri
-
-Short-link storage defense-in-depth limitleri kullanır:
-
-- maksimum row sayısı;
-- LRU trimming için daha düşük target row sayısı;
-- payload başına UTF-8 byte limiti;
-- her application SQLite connection üzerinde uygulanan `max_page_count`;
-- expiry ve trimming için periodic maintenance.
-
-SQLite `max_page_count` connection/runtime guard'dır. Persistent database header ayarı değildir ve OS-level filesystem quota yerine geçmez.
-
-Maintenance sırasında otomatik `VACUUM` bilinçli olarak yapılmaz; çünkü geçici olarak disk ve I/O tüketimini artırabilir.
-
-## Process isolation ve resource limitleri
-
-Systemd unit'leri loopback listener ve restrictive service ayarları kullanır. Bunlar arasında:
-
-- dedicated non-root `gosterme` user;
-- `NoNewPrivileges=true`;
-- `ProtectSystem=strict`;
-- `ProtectHome=true`;
-- capability bounding set'in kaldırılması;
-- private temporary/device namespace'leri;
-- kernel/control-group korumaları;
-- address-family restriction;
-- memory, task, file-descriptor ve CPU limitleri.
-
-Sandbox unit `/var/lib/goster.me` dizisine yalnızca read-only erişebilmelidir.
-
-## Reverse proxy / DNS
-
-Public TLS Caddy üzerinde sonlanır. Application listener'ları `127.0.0.1` üzerinde kalır.
-
-Beklenen public routing:
-
-```text
-goster.me    -> Caddy -> 127.0.0.1:8090
-s.goster.me  -> Caddy -> 127.0.0.1:8092
-```
-
-Internet'ten yalnızca Caddy erişilebilir olmalıdır. 8090/8092 portları firewall/security-group seviyesinde public olmamalıdır.
-
-`s.goster.me` adının kısa veya daha az açıklayıcı olması security boundary değildir; aşağıdaki güvenlik kontrolleri isimden bağımsız olarak zorunludur.
-
-## Adapter refactor'larında korunması gereken güvenlik invariants
-
-Adapter modularization şu kuralları korumalıdır:
-
-1. Adapter'lar içeriği classify/discover eder; centralized URL validation'ı bypass etmez.
-2. Clean embed source-page isolation'a tercih edilir.
-3. Bilinmeyen içerik fail closed olur.
-4. `render_mode=isolate` yalnızca dedicated sandbox origin üzerinden render edilir.
-5. Third-party HTML/JS hiçbir zaman `goster.me` üzerinden same-origin servis edilmez.
-6. Sandbox iframe privileges hiçbir zaman `allow-same-origin` içermez.
-7. Sandbox kayıtları read-only olmalı ve canlı isolate kayıtları olmalıdır.
-8. Çıplak sandbox short code public capability değildir; kısa ömürlü geçerli signature zorunludur.
-9. Site adapter'ları eklenmeden, silinmeden veya yeniden organize edilmeden önce security testlerinin tamamı green olmalıdır.
-
-## Deployment checklist
-
-Sandbox public edilmeden önce:
-
-1. Güçlü signing key üret:
-
-   ```bash
-   openssl rand -hex 32
-   ```
-
-2. Yalnızca `/etc/goster.me/gosterme.env` içine koy:
-
-   ```text
-   GOSTER_SANDBOX_SIGNING_KEY=<generated-secret>
-   GOSTER_SANDBOX_ORIGIN=https://s.goster.me
-   ```
-
-3. Main ve sandbox servislerinin aynı environment file'ı kullandığını doğrula.
-4. 8090 ve 8092'nin yalnızca loopback üzerinde dinlediğini doğrula.
-5. Main service entrypoint değiştirilmeden önce Caddy config'i validate edip reload et.
-6. Çıplak sandbox `/v/<code>` isteğinin 404 verdiğini doğrula.
-7. Invalid/expired signature'ın 404 verdiğini doğrula.
-8. Signed iframe URL'nin 200 verdiğini doğrula.
-9. Browser top-level navigation isteğinin `Sec-Fetch-Dest: document` olduğunda reddedildiğini doğrula.
-10. CSP içinde `allow-same-origin` sandbox privilege olmadığını doğrula.
-11. Bilinen reklam/analytics script URL'lerinin isolated output içinde bulunmadığını doğrula.
-12. Full regression suite'i çalıştır.
-
-## Bilinen sınırlamalar ve sonraki işler
-
-- Signed sandbox URL'leri kısa expiry süresi boyunca replay edilebilir.
-- Sandbox CSP broad HTTPS dependency'lere izin verir; çünkü native eğitim uygulamaları external asset kullanabilir. İleride adapter başına dependency allowlist ile sıkılaştırılabilir.
-- Sandbox içindeki legacy third-party native app'ler için `unsafe-inline` / `unsafe-eval` gerekebilir. Bunlar yalnızca document ayrı origin'de ve browser-sandboxed olduğu için kabul edilebilir.
-- Primary CSP, UI script/style externalized veya nonce/hash tabanlı olduktan sonra `unsafe-inline`'ı kaldırmalıdır.
-- Storage byte limitleri filesystem quota değil, application/SQLite kontrolleridir.
+Primary application CSP'si legacy inline asset'ler kaldırıldıkça daha da sıkılaştırılabilir. Storage limitleri application-level safeguard'dır; OS veya filesystem quota'nın yerini tutmaz.
