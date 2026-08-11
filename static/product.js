@@ -1,4 +1,139 @@
 (() => {
+    const home = document.querySelector(".product-home-minimal");
+
+    if (home) {
+        const button = home.querySelector(".url-submit");
+        if (button) {
+            button.textContent = "→";
+            button.setAttribute("aria-label", "Bağlantıyı aç");
+            button.setAttribute("title", "Bağlantıyı aç");
+        }
+
+        const style = document.createElement("style");
+        style.textContent = `
+            :root {
+                --g-bg: #f4f6f7;
+                --g-surface: transparent;
+                --g-surface-soft: rgba(29, 41, 57, .045);
+                --g-border: #cfd6dc;
+                --g-text: #20272d;
+                --g-muted: #7d8992;
+                --g-accent: #5d6f82;
+                --g-accent-hover: #46586b;
+                --g-accent-ink: #ffffff;
+                --g-focus: rgba(93, 111, 130, .22);
+            }
+
+            @media (prefers-color-scheme: dark) {
+                :root {
+                    --g-bg: #111417;
+                    --g-surface: transparent;
+                    --g-surface-soft: rgba(225, 232, 237, .05);
+                    --g-border: #303840;
+                    --g-text: #e8ecef;
+                    --g-muted: #87929a;
+                    --g-accent: #9baebb;
+                    --g-accent-hover: #b1c0ca;
+                    --g-accent-ink: #162028;
+                    --g-focus: rgba(155, 174, 187, .25);
+                }
+            }
+
+            .product-home-minimal {
+                display: block !important;
+                position: relative;
+                min-height: 100dvh;
+                padding: 0 1.15rem max(1rem, env(safe-area-inset-bottom)) !important;
+            }
+
+            .minimal-shell {
+                width: 100%;
+                min-height: 100dvh;
+                transform: none !important;
+                display: flex;
+                flex-direction: column;
+                justify-content: flex-end;
+                padding: 0 0 max(5.5rem, 15vh);
+            }
+
+            .minimal-wordmark {
+                order: 3;
+                margin: 1.35rem 0 0 !important;
+                color: var(--g-muted) !important;
+                font-size: .8rem !important;
+                font-weight: 560 !important;
+                letter-spacing: -.015em !important;
+            }
+
+            .product-url-form {
+                order: 1;
+                grid-template-columns: minmax(0, 1fr) 3rem !important;
+                gap: 0 !important;
+                padding: 0 !important;
+                border: 0 !important;
+                border-bottom: 1px solid var(--g-border) !important;
+                border-radius: 0 !important;
+                background: transparent !important;
+            }
+
+            .product-url-form input {
+                height: 3.35rem !important;
+                min-height: 3.35rem !important;
+                padding: 0 .05rem !important;
+                border-radius: 0 !important;
+                background: transparent !important;
+                font-size: 1.08rem !important;
+                font-weight: 430 !important;
+                letter-spacing: -.015em !important;
+            }
+
+            .product-url-form input:focus,
+            .product-url-form input:focus-visible {
+                background: transparent !important;
+                box-shadow: none !important;
+            }
+
+            .product-url-form button {
+                width: 3rem !important;
+                min-width: 3rem !important;
+                height: 3.35rem !important;
+                min-height: 3.35rem !important;
+                padding: 0 !important;
+                border-radius: 0 !important;
+                background: transparent !important;
+                color: var(--g-accent) !important;
+                font-size: 1.45rem !important;
+                font-weight: 400 !important;
+            }
+
+            .product-url-form button:hover {
+                background: var(--g-surface-soft) !important;
+            }
+
+            .minimal-links {
+                order: 2;
+                justify-content: flex-end;
+                gap: 1rem !important;
+                margin-top: .9rem !important;
+                font-size: .72rem !important;
+            }
+
+            .minimal-links a {
+                color: var(--g-muted) !important;
+            }
+
+            @media (min-width: 700px) {
+                .minimal-shell {
+                    max-width: 34rem;
+                    margin: 0 auto;
+                    justify-content: center;
+                    padding-bottom: 0;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
     const toast = document.createElement("div");
     toast.className = "toast";
     toast.hidden = true;
@@ -50,12 +185,8 @@
             try {
                 await navigator.clipboard.writeText(text);
                 return true;
-            } catch (_) {
-                // Fall through for browsers / policies that expose the API
-                // but reject the write.
-            }
+            } catch (_) {}
         }
-
         return legacyCopy(text);
     }
 
@@ -80,27 +211,19 @@
         }
 
         const ok = await copyText(url);
-        showToast(
-            ok
-                ? "Paylaşım desteklenmedi; bağlantı kopyalandı"
-                : "Bu tarayıcıda paylaşım kullanılamıyor"
-        );
+        showToast(ok ? "Paylaşım desteklenmedi; bağlantı kopyalandı" : "Bu tarayıcıda paylaşım kullanılamıyor");
     }
 
     document.addEventListener("click", async event => {
         const action = event.target.closest("[data-action]");
-        if (!action) {
-            return;
-        }
+        if (!action) return;
 
         const name = action.dataset.action;
-
         if (name === "copy") {
             event.preventDefault();
             await handleCopy(action);
             return;
         }
-
         if (name === "share") {
             event.preventDefault();
             await handleShare(action);
