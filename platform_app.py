@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 import product_app as app
 import adapter_extensions  # noqa: F401
 
-from sandbox_auth import signed_query
+from sandbox_auth import signed_query, signing_key
 from security import validate_public_origin
 
 
@@ -89,6 +89,9 @@ class Handler(app.Handler):
 
 
 if __name__ == "__main__":
+    # Fail closed before accepting traffic if deployment forgot the shared
+    # sandbox capability secret.
+    signing_key()
     purged = app.STORE.purge_expired()
 
     print(
