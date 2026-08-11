@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 import tempfile
 import unittest
 
@@ -21,6 +20,9 @@ class StorageMaintenanceTests(unittest.TestCase):
             self.path,
             ttl_seconds=60,
             code_length=6,
+            database_max_bytes=8 * 1024 * 1024,
+            max_rows=100,
+            target_rows=80,
         )
         self.item = ResolvedContent(
             kind="embed",
@@ -65,8 +67,8 @@ class StorageMaintenanceTests(unittest.TestCase):
         self.assertEqual(stats["trimmed"], 3)
         self.assertEqual(stats["remaining"], 3)
 
-    def test_persists_page_cap(self):
-        maintain_database(
+    def test_applies_page_cap_to_maintenance_connection(self):
+        stats = maintain_database(
             self.path,
             now=120,
             max_rows=10,
@@ -74,12 +76,59 @@ class StorageMaintenanceTests(unittest.TestCase):
             max_bytes=4 * 1024 * 1024,
         )
 
-        with sqlite3.connect(self.path) as db:
+        self.assertLessEqual(
+            stats["max_pages_this_connection"] * stats["page_size"],
+            4 * 1024 * 1024,
+        )
+        self.assertGreater(stats["max_pages_this_connection"], 0)
+
+    def test_store_applies_page_cap_on_each_connection(self):
+        capped = ShortLinkStore(
+            self.path,
+            ttl_seconds=60,
+            code_length=6,
+            database_max_bytes=4 * 1024 * 1024,
+            max_rows=100,
+            target_rows=80,
+        )
+
+        with capped._connect() as db:
             page_size = int(db.execute("PRAGMA page_size").fetchone()[0])
             max_pages = int(db.execute("PRAGMA max_page_count").fetchone()[0])
 
         self.assertLessEqual(max_pages * page_size, 4 * 1024 * 1024)
-        self.assertGreater(max_pages, 0)
+
+    def test_store_trims_before_write_at_row_ceiling(self):
+        capped = ShortLinkStore(
+            self.path,
+            ttl_seconds=1000,
+            code_length=6,
+            database_max_bytes=8 * 1024 * 1024,
+            max_rows=5,
+            target_rows=3,
+        )
+
+        for timestamp in range(100, 106):
+            capped.save(self.item, now=timestamp)
+
+        with capped._connect() as db:
+            rows = int(db.execute("SELECT COUNT(*) FROM short_links").fetchone()[0])
+
+        self.assertLessEqual(rows, 5)
+
+    def test_rejects_oversized_payload(self):
+        capped = ShortLinkStore(
+            self.path,
+            ttl_seconds=60,
+            code_length=6,
+            database_max_bytes=8 * 1024 * 1024,
+            max_rows=100,
+            target_rows=80,
+            max_payload_bytes=128,
+        )
+
+        with self.assertRaises(ValueError):
+            capped.save(self.item, now=100)
 
 
 if __name__ == "__main__":
