@@ -44,15 +44,16 @@ def maintain_database(
     with sqlite3.connect(db_path, timeout=30) as db:
         page_size = int(db.execute("PRAGMA page_size").fetchone()[0])
         max_pages = max(1, max_bytes // page_size)
-
         current_pages = int(db.execute("PRAGMA page_count").fetchone()[0])
+
         if current_pages > max_pages:
             raise RuntimeError(
                 f"database already exceeds configured cap: {current_pages * page_size} > {max_bytes}"
             )
 
-        # This value is persisted in the database header and therefore applies
-        # to subsequent application connections too.
+        # max_page_count is connection-scoped in practice. Applying it here
+        # protects this maintenance connection; ShortLinkStore applies the same
+        # cap on every application connection where new rows can be written.
         applied_max_pages = int(
             db.execute(f"PRAGMA max_page_count={max_pages}").fetchone()[0]
         )
@@ -94,7 +95,7 @@ def maintain_database(
         "page_size": page_size,
         "page_count": page_count,
         "freelist_count": freelist_count,
-        "max_pages": applied_max_pages,
+        "max_pages_this_connection": applied_max_pages,
         "logical_bytes": page_count * page_size,
     }
 
