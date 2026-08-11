@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 import product_app as app
 import adapter_extensions  # noqa: F401
 
+from sandbox_auth import signed_query
 from security import validate_public_origin
 
 
@@ -37,7 +38,8 @@ app.hardened_resolve_url = resolve_with_sandbox
 
 def render_sandbox_shell(code: str, item) -> str:
     title = app.legacy.clean_title(item.title)
-    sandbox_url = f"{SANDBOX_ORIGIN}/v/{app.escape(code)}"
+    query = signed_query(code)
+    sandbox_url = f"{SANDBOX_ORIGIN}/v/{app.escape(code)}?{query}"
 
     return app.product_document(
         title,
