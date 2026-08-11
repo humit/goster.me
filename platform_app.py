@@ -59,6 +59,9 @@ def render_sandbox_shell(code: str, item) -> str:
 
 
 class Handler(app.Handler):
+    server_version = "goster.me"
+    sys_version = ""
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
