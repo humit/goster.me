@@ -8,6 +8,7 @@ from http.server import ThreadingHTTPServer
 from urllib.parse import urlparse
 
 import product_app as app
+import adapter_extensions  # noqa: F401
 
 from security import validate_public_origin
 
