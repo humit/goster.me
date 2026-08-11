@@ -17,7 +17,7 @@ goster.me {
 
 # Dedicated untrusted-content origin. The backend emits its own CSP with
 # frame-ancestors https://goster.me and CSP sandbox restrictions.
-sandbox.goster.me {
+s.goster.me {
     header {
         -Server
         -X-Powered-By
