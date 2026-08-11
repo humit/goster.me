@@ -24,7 +24,7 @@ goster.me
    +---------------------------+
                                |
                                v
-                         ayrı sandbox origin
+                           s.goster.me
                                |
                                v
                      üçüncü taraf HTML / JavaScript
@@ -32,7 +32,7 @@ goster.me
 
 Amaç şudur: kaynak sitedeki JavaScript kötü niyetli, bozuk veya aşırı meraklı olsa bile `goster.me`'nin kendi cookie'lerine, local storage'ına, DOM'una veya uygulama yetkilerine sahip olmasın.
 
-Sandbox'ın adının gizli olması bir güvenlik önlemi değildir. İster `sandbox.goster.me`, ister daha kısa bir ad kullanılsın, gerçek güvenlik; ayrı origin, kısa ömürlü imzalı erişim URL'si, browser sandbox kuralları, CSP, merkezi URL doğrulama ve read-only storage gibi katmanlardan gelir.
+Sandbox'ın adının gizli olması bir güvenlik önlemi değildir. `s.goster.me` kısa ve nötr bir isimdir; gerçek güvenlik ayrı origin, kısa ömürlü imzalı erişim URL'si, browser sandbox kuralları, CSP, merkezi URL doğrulama ve read-only storage gibi katmanlardan gelir.
 
 Basit güvenlik prensibimiz şudur:
 
@@ -86,7 +86,7 @@ primary `goster.me/<code>`
         |
         | kısa ömürlü imzalı capability URL
         v
-`sandbox.goster.me/v/<code>?exp=...&sig=...`
+`s.goster.me/v/<code>?exp=...&sig=...`
         |
         v
 browser sandbox içinde third-party HTML/JS
@@ -133,7 +133,7 @@ Adapter yalnızca içeriği ve activity root'u tanımlar. Browser'a ek yetki ver
 
 ## Sandbox origin
 
-Üçüncü taraf source HTML yalnızca `sandbox.goster.me` üzerinden servis edilir; ana origin üzerinden asla servis edilmez.
+Üçüncü taraf source HTML yalnızca `s.goster.me` üzerinden servis edilir; ana origin üzerinden asla servis edilmez.
 
 Sandbox servisi:
 
@@ -152,13 +152,13 @@ Sandbox servisi:
 Şu tip çıplak bir URL sandbox içeriğine erişmek için yeterli değildir:
 
 ```text
-https://sandbox.goster.me/v/abc346
+https://s.goster.me/v/abc346
 ```
 
 Primary service kısa ömürlü HMAC-SHA256 imzalı bir capability URL üretir:
 
 ```text
-https://sandbox.goster.me/v/abc346?exp=<unix-time>&sig=<hmac>
+https://s.goster.me/v/abc346?exp=<unix-time>&sig=<hmac>
 ```
 
 İmza short code ve expiry time'a bağlıdır. Sandbox; eksik, hatalı, süresi geçmiş, duplicate veya beklenmeyen query parametrelerini reddeder. Capability ömrü en fazla on dakikadır.
@@ -252,13 +252,13 @@ Public TLS Caddy üzerinde sonlanır. Application listener'ları `127.0.0.1` üz
 Beklenen public routing:
 
 ```text
-goster.me          -> Caddy -> 127.0.0.1:8090
-sandbox.goster.me  -> Caddy -> 127.0.0.1:8092
+goster.me    -> Caddy -> 127.0.0.1:8090
+s.goster.me  -> Caddy -> 127.0.0.1:8092
 ```
 
 Internet'ten yalnızca Caddy erişilebilir olmalıdır. 8090/8092 portları firewall/security-group seviyesinde public olmamalıdır.
 
-Sandbox subdomain adı bir security boundary değildir. Daha kısa bir isim, örneğin `s.goster.me`, seçilirse aşağıdaki güvenlik kontrollerinin hiçbiri gevşetilmemelidir.
+`s.goster.me` adının kısa veya daha az açıklayıcı olması security boundary değildir; aşağıdaki güvenlik kontrolleri isimden bağımsız olarak zorunludur.
 
 ## Adapter refactor'larında korunması gereken güvenlik invariants
 
@@ -288,7 +288,7 @@ Sandbox public edilmeden önce:
 
    ```text
    GOSTER_SANDBOX_SIGNING_KEY=<generated-secret>
-   GOSTER_SANDBOX_ORIGIN=https://sandbox.goster.me
+   GOSTER_SANDBOX_ORIGIN=https://s.goster.me
    ```
 
 3. Main ve sandbox servislerinin aynı environment file'ı kullandığını doğrula.
