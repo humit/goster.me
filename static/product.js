@@ -116,6 +116,25 @@
             }
         `;
         document.head.appendChild(style);
+
+        const tag = document.createElement("div");
+        tag.textContent = "quiet-brand · v1";
+        tag.setAttribute("aria-hidden", "true");
+        Object.assign(tag.style, {
+            position: "fixed",
+            left: "50%",
+            bottom: "max(.55rem, env(safe-area-inset-bottom))",
+            transform: "translateX(-50%)",
+            color: "var(--g-muted)",
+            opacity: ".42",
+            fontSize: "10px",
+            lineHeight: "1",
+            letterSpacing: ".06em",
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+            pointerEvents: "none",
+            zIndex: "1"
+        });
+        document.body.appendChild(tag);
     }
 
     const toast = document.createElement("div");
