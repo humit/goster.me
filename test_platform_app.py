@@ -39,7 +39,7 @@ class PlatformSandboxTests(unittest.TestCase):
         ):
             page = platform_app.render_sandbox_shell("abc346", item)
 
-        self.assertIn("https://sandbox.goster.me/v/abc346?exp=", page)
+        self.assertIn("https://s.goster.me/v/abc346?exp=", page)
         self.assertIn("&amp;sig=", page)
         self.assertIn("sandbox=\"allow-scripts allow-modals allow-pointer-lock allow-presentation\"", page)
         self.assertNotIn("allow-same-origin", page)
