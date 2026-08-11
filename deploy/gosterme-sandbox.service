@@ -1,0 +1,45 @@
+[Unit]
+Description=goster.me isolated content sandbox
+After=network-online.target gosterme.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gosterme
+Group=gosterme
+WorkingDirectory=/opt/goster.me
+EnvironmentFile=-/etc/goster.me/gosterme.env
+Environment=GOSTER_SANDBOX_HOST=127.0.0.1
+Environment=GOSTER_SANDBOX_PORT=8092
+ExecStart=/opt/goster.me/.venv/bin/python /opt/goster.me/sandbox_app.py
+Restart=on-failure
+RestartSec=2
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/var/lib/goster.me
+
+MemoryHigh=128M
+MemoryMax=192M
+TasksMax=32
+LimitNOFILE=256
+CPUQuota=75%
+
+UMask=0077
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target
