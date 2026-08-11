@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import os
 
 from http.server import ThreadingHTTPServer
@@ -39,7 +40,7 @@ app.hardened_resolve_url = resolve_with_sandbox
 def render_sandbox_shell(code: str, item) -> str:
     title = app.legacy.clean_title(item.title)
     query = signed_query(code)
-    sandbox_url = app.escape(
+    sandbox_url = html.escape(
         f"{SANDBOX_ORIGIN}/v/{code}?{query}",
         quote=True,
     )
