@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import time
 
@@ -31,6 +32,21 @@ MAIN_ORIGIN = os.environ.get("GOSTER_PUBLIC_ORIGIN", "https://goster.me").rstrip
 
 _ORIGINAL_FETCH_HTML = adapters.fetch_html
 
+_TRACKING_HOSTS = (
+    "googletagmanager.com",
+    "googlesyndication.com",
+    "google-analytics.com",
+    "doubleclick.net",
+)
+_SCRIPT_BLOCK_RE = re.compile(
+    r"<script\b(?P<attrs>[^>]*)>(?P<body>.*?)</script\s*>",
+    re.IGNORECASE | re.DOTALL,
+)
+_IFRAME_BLOCK_RE = re.compile(
+    r"<iframe\b(?P<attrs>[^>]*)>(?P<body>.*?)</iframe\s*>",
+    re.IGNORECASE | re.DOTALL,
+)
+
 
 def hardened_fetch_html(url: str, allowed_hosts: set[str]):
     return call_with_redirect_allowlist(
@@ -45,6 +61,38 @@ def hardened_fetch_html(url: str, allowed_hosts: set[str]):
 adapters.urlopen = safe_urlopen
 adapters.fetch_html = hardened_fetch_html
 legacy.fetch_html = hardened_fetch_html
+
+
+def strip_known_tracking_html(value: str) -> str:
+    """Remove common analytics/ad execution blocks before browser parsing.
+
+    Isolation protects the primary origin, but known analytics and advertising
+    scripts are unnecessary for the child-facing activity and should not be
+    fetched or executed by the sandboxed document.
+    """
+
+    def strip_script(match: re.Match[str]) -> str:
+        attrs = match.group("attrs").lower()
+        body = match.group("body").lower()
+
+        if any(host in attrs for host in _TRACKING_HOSTS):
+            return ""
+
+        # Common inline Google Analytics bootstrap paired with gtag.js.
+        if "gtag(" in body and "datalayer" in body:
+            return ""
+
+        return match.group(0)
+
+    def strip_iframe(match: re.Match[str]) -> str:
+        attrs = match.group("attrs").lower()
+        if any(host in attrs for host in _TRACKING_HOSTS):
+            return ""
+        return match.group(0)
+
+    value = _SCRIPT_BLOCK_RE.sub(strip_script, value)
+    value = _IFRAME_BLOCK_RE.sub(strip_iframe, value)
+    return value
 
 
 def valid_code(code: str) -> bool:
@@ -175,6 +223,7 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             page = legacy.render_isolated_source(item)
+            page = strip_known_tracking_html(page)
         except Exception as exc:
             self.log_error("sandbox render failed code=%s error=%r", code, exc)
             self.send_error(502)
