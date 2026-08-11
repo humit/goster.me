@@ -16,7 +16,7 @@ import adapters
 import public_app as legacy
 
 from adapters import ResolvedContent
-from sandbox_auth import verify
+from sandbox_auth import signing_key, verify
 from security import call_with_redirect_allowlist, safe_urlopen
 from shortlinks import SHORT_CODE_ALPHABET, SHORT_CODE_LENGTH
 
@@ -267,6 +267,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    # Fail closed before accepting traffic if deployment forgot the shared
+    # sandbox capability secret.
+    signing_key()
+
     print(
         f"goster sandbox listening on http://{HOST}:{PORT} "
         f"(database={DATABASE_PATH}, parent={MAIN_ORIGIN})",
