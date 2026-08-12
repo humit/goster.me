@@ -53,54 +53,58 @@ def compact_preview_actions(
 <style>
 .viewer-compact-menu {{
     position: fixed;
-    right: max(.45rem, env(safe-area-inset-right));
-    top: 48%;
-    transform: translateY(-50%);
+    right: max(.7rem, env(safe-area-inset-right));
+    bottom: max(4.75rem, calc(env(safe-area-inset-bottom) + 3.75rem));
     z-index: 2147483646;
     font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }}
 .viewer-compact-menu > summary {{
-    min-width: 5.9rem;
-    height: 2.45rem;
-    display: inline-flex;
+    width: 4.5rem;
+    min-height: 3rem;
+    display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: .34rem;
-    padding: 0 .72rem;
+    gap: .08rem;
+    padding: .35rem .45rem .28rem;
     box-sizing: border-box;
     list-style: none;
     cursor: pointer;
     border: 1px solid rgba(255,255,255,.2);
-    border-radius: 999px;
-    background: rgba(9,11,14,.72);
+    border-radius: .85rem;
+    background: rgba(9,11,14,.74);
     color: #fff;
-    opacity: .78;
+    opacity: .84;
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    font-size: .72rem;
-    font-weight: 680;
-    letter-spacing: -.015em;
-    line-height: 1;
     user-select: none;
+    box-shadow: 0 .3rem 1rem rgba(0,0,0,.14);
 }}
 .viewer-compact-menu > summary::-webkit-details-marker {{ display: none; }}
 .viewer-compact-menu > summary:hover,
 .viewer-compact-menu > summary:focus-visible,
 .viewer-compact-menu[open] > summary {{ opacity: 1; }}
+.viewer-compact-brand {{
+    font-size: .67rem;
+    font-weight: 700;
+    letter-spacing: -.02em;
+    line-height: 1.05;
+}}
 .viewer-compact-dots {{
     font-size: 1rem;
-    letter-spacing: .08em;
-    transform: translateY(-.06rem);
+    font-weight: 700;
+    letter-spacing: .09em;
+    line-height: .8;
 }}
 .viewer-compact-panel {{
     position: absolute;
     right: 0;
-    top: calc(100% + .45rem);
+    bottom: calc(100% + .5rem);
     width: min(19rem, calc(100vw - 1.4rem));
     padding: .45rem;
     border: 1px solid rgba(255,255,255,.13);
     border-radius: .85rem;
-    background: rgba(12,14,18,.94);
+    background: rgba(12,14,18,.95);
     color: #fff;
     box-shadow: 0 .6rem 1.8rem rgba(0,0,0,.22);
     backdrop-filter: blur(14px);
@@ -147,13 +151,17 @@ def compact_preview_actions(
     overflow-wrap: anywhere;
 }}
 @media (max-width: 430px) {{
-    .viewer-compact-menu {{ right: max(.35rem, env(safe-area-inset-right)); top: 56%; }}
-    .viewer-compact-menu > summary {{ min-width: 5.6rem; }}
+    .viewer-compact-menu {{
+        right: max(.55rem, env(safe-area-inset-right));
+        bottom: max(5rem, calc(env(safe-area-inset-bottom) + 4rem));
+    }}
+    .viewer-compact-menu > summary {{ width: 4.25rem; min-height: 2.85rem; }}
 }}
 </style>
 <details class="viewer-compact-menu">
     <summary aria-label="goster.me menüsü" title="goster.me menüsü">
-        <span>goster.me</span><span class="viewer-compact-dots" aria-hidden="true">•••</span>
+        <span class="viewer-compact-brand">goster.me</span>
+        <span class="viewer-compact-dots" aria-hidden="true">•••</span>
     </summary>
     <div class="viewer-compact-panel">
         <div class="viewer-compact-row">
