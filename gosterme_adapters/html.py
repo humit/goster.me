@@ -39,3 +39,23 @@ class BasicHTMLParser(HTMLParser):
     def title(self) -> str | None:
         value = " ".join(self.title_parts).strip()
         return value or None
+
+
+class NativeGameFingerprintParser(BasicHTMLParser):
+    """Collect stable DOM fingerprints for inline educational games."""
+
+    def __init__(self):
+        super().__init__()
+        self.ids: set[str] = set()
+        self.classes: set[str] = set()
+
+    def handle_starttag(self, tag, attrs):
+        super().handle_starttag(tag, attrs)
+        attrs = dict(attrs)
+
+        element_id = attrs.get("id")
+        if element_id:
+            self.ids.add(element_id)
+
+        for cls in attrs.get("class", "").split():
+            self.classes.add(cls)
