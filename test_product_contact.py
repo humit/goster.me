@@ -32,6 +32,23 @@ class ProductContactTests(unittest.TestCase):
             script,
         )
 
+    def test_home_is_complete_before_javascript_runs(self):
+        page = product_app.render_home()
+        script = (product_app.STATIC_DIR / "product.js").read_text()
+        stylesheet = (product_app.STATIC_DIR / "product.css").read_text()
+
+        self.assertIn('<body class="home-document">', page)
+        self.assertIn('method="post" action="/resolve"', page)
+        self.assertIn('name="url"', page)
+        self.assertIn('type="url"', page)
+        self.assertIn('aria-label="Bağlantıyı aç"', page)
+        self.assertIn('<span aria-hidden="true">→</span>', page)
+        self.assertNotIn('document.createElement("style")', script)
+        self.assertNotIn('button.textContent = "→"', script)
+        self.assertNotIn("tool-first · v3", script)
+        self.assertIn("body.home-document", stylesheet)
+        self.assertIn("grid-template-columns: minmax(0, 1fr) 3.2rem", stylesheet)
+
     def test_about_explains_first_party_measurement(self):
         page = product_app.render_about()
         self.assertIn("Ham IP adresi saklanmaz", page)

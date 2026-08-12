@@ -270,6 +270,7 @@ def product_document(
     *,
     description: str | None = None,
     canonical_path: str | None = None,
+    body_class: str | None = None,
 ) -> str:
     """Shared HTML shell.
 
@@ -288,7 +289,7 @@ def product_document(
 {legacy.BASE_STYLE}
 <link rel="stylesheet" href="/static/product.css">
 </head>
-<body>
+<body{f' class="{escape(body_class)}"' if body_class else ''}>
 {body}
 <script src="/static/product.js" defer></script>
 </body>
@@ -326,7 +327,12 @@ def render_home(campaign: str | None = None) -> str:
                 required
                 autofocus
             >
-            <button class="url-submit" type="submit">Göster</button>
+            <button
+                class="url-submit"
+                type="submit"
+                aria-label="Bağlantıyı aç"
+                title="Bağlantıyı aç"
+            ><span aria-hidden="true">→</span></button>
         </form>
 
         <nav class="minimal-links" aria-label="Bilgi">
@@ -338,6 +344,7 @@ def render_home(campaign: str | None = None) -> str:
 """,
         description=PUBLIC_META_DESCRIPTION,
         canonical_path="/",
+        body_class="home-document",
     )
 
 
