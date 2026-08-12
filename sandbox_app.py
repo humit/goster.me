@@ -107,6 +107,25 @@ def structural_isolation_script(selector: str) -> str:
     remain in the document and continue to execute normally.
     """
     selector_json = json.dumps(selector)
+    scroll_fix = ""
+
+    if selector == "#bilge-quiz-app":
+        scroll_fix = """
+    // Bilge Quiz can be taller than a phone viewport. The legacy isolation
+    // CSS positions every activity root absolutely, which removes its height
+    // from normal document flow and prevents mobile document scrolling.
+    document.documentElement.style.setProperty("overflow-y", "auto", "important");
+    document.body.style.setProperty("overflow-y", "auto", "important");
+    document.body.style.setProperty("height", "auto", "important");
+    document.body.style.setProperty("min-height", "100dvh", "important");
+    root.style.setProperty("position", "relative", "important");
+    root.style.setProperty("top", "auto", "important");
+    root.style.setProperty("left", "auto", "important");
+    root.style.setProperty("height", "auto", "important");
+    root.style.setProperty("min-height", "100dvh", "important");
+    root.style.setProperty("overflow", "visible", "important");
+    root.style.setProperty("-webkit-overflow-scrolling", "touch", "important");
+"""
 
     return f"""
 <script id="goster-structural-isolation">
@@ -146,7 +165,7 @@ def structural_isolation_script(selector: str) -> str:
             }}
         }}
     }}
-}})();
+{scroll_fix}}})();
 </script>
 """
 
