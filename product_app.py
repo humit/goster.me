@@ -597,7 +597,6 @@ class Handler(legacy.Handler):
                     provider=item.provider,
                     adapter=item.adapter,
                     render_mode=item.render_mode,
-                    code=code,
                 )
                 self.send_html(
                     200,
@@ -720,7 +719,6 @@ class Handler(legacy.Handler):
             provider=item.provider,
             adapter=item.adapter,
             render_mode=item.render_mode,
-            code=item_id,
         )
         self.redirect(f"/{item_id}")
 
@@ -751,7 +749,6 @@ class Handler(legacy.Handler):
                 provider=item.provider,
                 adapter=item.adapter,
                 render_mode=item.render_mode,
-                code=code,
             )
         except (UnicodeError, ValueError, json.JSONDecodeError):
             self.send_error(400)
