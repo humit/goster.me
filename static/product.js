@@ -214,8 +214,27 @@
         return legacyCopy(text);
     }
 
+    function analyticsCode(element) {
+        const path = new URL(actionUrl(element)).pathname;
+        const match = path.match(/^\/([a-z0-9]{4,16})$/);
+        return match ? match[1] : null;
+    }
+
+    function recordProductEvent(event, element) {
+        const code = analyticsCode(element);
+        if (!code) return;
+        fetch("/api/events", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ event, code }),
+            keepalive: true,
+            credentials: "same-origin"
+        }).catch(() => {});
+    }
+
     async function handleCopy(element) {
         const ok = await copyText(actionUrl(element));
+        if (ok) recordProductEvent("copy_click", element);
         showToast(ok ? "Bağlantı kopyalandı" : "Bağlantı kopyalanamadı");
     }
 
@@ -226,6 +245,7 @@
         if (navigator.share) {
             try {
                 await navigator.share({ title, url });
+                recordProductEvent("share_click", element);
                 return;
             } catch (error) {
                 if (error && error.name === "AbortError") {

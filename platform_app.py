@@ -83,6 +83,12 @@ class Handler(app.Handler):
                 if item is not None and item.render_mode == "isolate":
                     # Count only content that is actually served by the shell.
                     item = app.STORE.get(code)
+                    app.ANALYTICS.record(
+                        "viewer_open",
+                        provider=item.provider,
+                        adapter=item.adapter,
+                        render_mode=item.render_mode,
+                        )
                     self.send_html(200, render_sandbox_shell(code, item))
                     return
 

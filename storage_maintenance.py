@@ -8,6 +8,8 @@ import time
 
 from pathlib import Path
 
+from analytics import RAW_RETENTION_SECONDS
+
 
 DATABASE_PATH = Path(
     os.environ.get(
@@ -63,6 +65,16 @@ def maintain_database(
             (timestamp,),
         ).rowcount
 
+        analytics_purged = 0
+        analytics_table = db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'analytics_events'"
+        ).fetchone()
+        if analytics_table is not None:
+            analytics_purged = db.execute(
+                "DELETE FROM analytics_events WHERE occurred_at < ?",
+                (timestamp - RAW_RETENTION_SECONDS,),
+            ).rowcount
+
         rows = int(db.execute("SELECT COUNT(*) FROM short_links").fetchone()[0])
         trimmed = 0
 
@@ -90,6 +102,7 @@ def maintain_database(
 
     return {
         "expired": expired,
+        "analytics_purged": analytics_purged,
         "trimmed": trimmed,
         "remaining": remaining,
         "page_size": page_size,
