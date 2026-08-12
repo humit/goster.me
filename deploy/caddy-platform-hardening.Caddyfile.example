@@ -34,6 +34,10 @@ s.goster.me {
 
     encode zstd gzip
 
+    handle /robots.txt {
+        reverse_proxy 127.0.0.1:8092
+    }
+
     handle /v/* {
         reverse_proxy 127.0.0.1:8092
     }

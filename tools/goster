@@ -206,6 +206,41 @@ service_pid() {
     systemctl show -p MainPID --value "$1" 2>/dev/null || true
 }
 
+probe_http_status() {
+    local status
+    if status="$(
+        curl \
+            --silent \
+            --show-error \
+            --connect-timeout 2 \
+            --max-time 5 \
+            --output /dev/null \
+            --write-out '%{http_code}' \
+            "$1" 2>/dev/null
+    )"; then
+        printf '%s' "$status"
+    else
+        printf '%s' "${status:-000}"
+    fi
+}
+
+wait_for_http_status() {
+    local url="$1" expected="$2" attempts="${3:-10}"
+    local attempt status
+
+    for ((attempt = 1; attempt <= attempts; attempt++)); do
+        status="$(probe_http_status "$url")"
+        if [ "$status" = "$expected" ]; then
+            printf '%s\n' "$status"
+            return 0
+        fi
+        [ "$attempt" -eq "$attempts" ] || sleep 1
+    done
+
+    printf '%s\n' "$status"
+    return 1
+}
+
 cmd_prod_status() {
     require_repo
 
@@ -223,10 +258,12 @@ cmd_prod_status() {
     printf 'sandbox_pid: %s\n' "${sandbox_pid:-0}"
 
     if command -v curl >/dev/null 2>&1; then
+        local http_failed=0
         printf 'home_http: '
-        curl -sS -o /dev/null -w '%{http_code}\n' https://goster.me/ || true
+        wait_for_http_status https://goster.me/ 200 || http_failed=1
         printf 'sandbox_bare_http: '
-        curl -sS -o /dev/null -w '%{http_code}\n' https://s.goster.me/v/invalid || true
+        wait_for_http_status https://s.goster.me/v/invalid 404 || http_failed=1
+        [ "$http_failed" -eq 0 ] || die "production HTTP readiness checks failed"
     fi
 }
 

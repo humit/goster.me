@@ -4,12 +4,27 @@ from __future__ import annotations
 
 import unittest
 
+from io import BytesIO
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import product_app
 import sandbox_app
+
+
+def head_handler(handler_type, path):
+    handler = handler_type.__new__(handler_type)
+    handler.command = "HEAD"
+    handler.path = path
+    handler.request_version = "HTTP/1.1"
+    handler.requestline = f"HEAD {path} HTTP/1.1"
+    handler.client_address = ("203.0.113.10", 12345)
+    handler.headers = {}
+    handler.wfile = BytesIO()
+    handler.log_request = Mock()
+    return handler
 
 
 class PublicWebStandardsTests(unittest.TestCase):
@@ -113,6 +128,69 @@ class PublicWebStandardsTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIsNone(product_app.robots_directive_for_target(path))
 
+    def test_head_standard_routes_match_get_headers_without_a_body(self):
+        expected = {
+            "/robots.txt": "text/plain; charset=utf-8",
+            "/sitemap.xml": "application/xml; charset=utf-8",
+            "/.well-known/security.txt": "text/plain; charset=utf-8",
+        }
+
+        for path, content_type in expected.items():
+            with self.subTest(path=path):
+                handler = head_handler(product_app.Handler, path)
+                handler.do_HEAD()
+                response = handler.wfile.getvalue()
+                headers, body = response.split(b"\r\n\r\n", 1)
+
+                self.assertIn(b"HTTP/1.0 200 OK", headers)
+                self.assertIn(f"Content-Type: {content_type}".encode(), headers)
+                self.assertRegex(headers, rb"Content-Length: [1-9][0-9]*")
+                self.assertEqual(body, b"")
+
+    def test_head_home_has_no_body_or_analytics_side_effect(self):
+        handler = head_handler(product_app.Handler, "/")
+
+        with patch.object(product_app.ANALYTICS, "record") as record:
+            handler.do_HEAD()
+
+        headers, body = handler.wfile.getvalue().split(b"\r\n\r\n", 1)
+        self.assertIn(b"HTTP/1.0 200 OK", headers)
+        self.assertIn(b"Content-Type: text/html; charset=utf-8", headers)
+        self.assertEqual(body, b"")
+        record.assert_not_called()
+
+    def test_head_viewer_preserves_noindex_without_touching_the_item(self):
+        item = Mock(provider="youtube", adapter="youtube", render_mode="embed")
+        handler = head_handler(product_app.Handler, "/abc346")
+
+        with (
+            patch.object(product_app.STORE, "get", return_value=item) as get,
+            patch.object(product_app.ANALYTICS, "record") as record,
+            patch.object(product_app.legacy, "render_child", return_value="viewer"),
+        ):
+            handler.do_HEAD()
+
+        headers, body = handler.wfile.getvalue().split(b"\r\n\r\n", 1)
+        self.assertIn(b"HTTP/1.0 200 OK", headers)
+        self.assertIn(
+            b"X-Robots-Tag: noindex, nofollow, noarchive",
+            headers,
+        )
+        self.assertEqual(body, b"")
+        get.assert_called_once_with("abc346", touch=False)
+        record.assert_not_called()
+
+    def test_caddy_example_exposes_only_sandbox_viewer_and_robots_routes(self):
+        config = (
+            Path(__file__).resolve().parent
+            / "deploy/caddy-platform-hardening.Caddyfile.example"
+        ).read_text()
+        sandbox_block = config.split("s.goster.me {", 1)[1]
+
+        self.assertIn("handle /robots.txt {", sandbox_block)
+        self.assertIn("handle /v/* {", sandbox_block)
+        self.assertIn("handle {\n        respond 404\n    }", sandbox_block)
+
 
 class SandboxCrawlerPolicyTests(unittest.TestCase):
     def test_sandbox_robots_denies_all_crawlers(self):
@@ -145,6 +223,19 @@ class SandboxCrawlerPolicyTests(unittest.TestCase):
             dict(headers)["X-Robots-Tag"],
             "noindex, nofollow, noarchive",
         )
+
+    def test_head_robots_has_no_body_and_keeps_noindex(self):
+        handler = head_handler(sandbox_app.Handler, "/robots.txt")
+        handler.do_HEAD()
+
+        headers, body = handler.wfile.getvalue().split(b"\r\n\r\n", 1)
+        self.assertIn(b"HTTP/1.0 200 OK", headers)
+        self.assertIn(b"Content-Type: text/plain; charset=utf-8", headers)
+        self.assertIn(
+            b"X-Robots-Tag: noindex, nofollow, noarchive",
+            headers,
+        )
+        self.assertEqual(body, b"")
 
 
 if __name__ == "__main__":
