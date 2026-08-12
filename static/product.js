@@ -239,7 +239,7 @@
     }
 
     function shareMessage(title, url) {
-        return `${title}\n${url}\n\n[ dikkat dağıtıcı öğelerden arındırılmış temiz içerik - https://goster.me ]`;
+        return `${title}\n${url}\n\n[ dikkat dağıtıcı öğelerden arındırılmış temiz içerik - www.goster.me ]`;
     }
 
     async function handleShare(element) {
