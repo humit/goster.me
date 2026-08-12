@@ -194,6 +194,30 @@ python3 -m unittest -v test_shortlinks.py
 Adapter geliştirmede temsilî URL'leri önce `test-adapter` ile kontrol edin; milestone
 öncesinde tam corpus regression çalıştırın.
 
+## Mahremiyet odaklı ürün ölçümü
+
+goster.me, üçüncü taraf analytics JavaScript'i, cookie, IP adresi, User-Agent,
+referrer veya cihaz parmak izi saklamaz. Yalnızca ürünün çalışıp çalışmadığını
+anlamak için izinli olay adları ile provider, adapter, render mode, anonim kısa kod
+ve doğrulanmış kampanya etiketi kaydedilir. Kaynak URL analytics tablosuna yazılmaz.
+
+Veli grubu duyurusu için kullanılacak kampanya bağlantısı:
+
+```text
+https://goster.me/?from=veli-whatsapp-2026-08
+```
+
+Son 24 saatin raporu:
+
+```bash
+GOSTER_DATABASE=/var/lib/goster.me/goster.sqlite3 \
+python3 analytics.py --since-hours 24 --campaign veli-whatsapp-2026-08
+```
+
+Ham analytics olayları varsayılan olarak 30 gün tutulur ve mevcut
+`gosterme-storage-maintenance.timer` tarafından temizlenir. Süre
+`GOSTER_ANALYTICS_RETENTION_SECONDS` ile değiştirilebilir.
+
 ## Güvenlik yaklaşımı
 
 goster.me unrestricted web proxy değildir. Temel yaklaşım **content minimization**dır:
