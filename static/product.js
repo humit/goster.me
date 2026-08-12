@@ -258,7 +258,27 @@
         showToast(ok ? "Paylaşım desteklenmedi; bağlantı kopyalandı" : "Bu tarayıcıda paylaşım kullanılamıyor");
     }
 
+    function closeCompactViewerMenus(except = null) {
+        document.querySelectorAll("details.viewer-compact-menu[open]").forEach(menu => {
+            if (menu !== except) menu.removeAttribute("open");
+        });
+    }
+
     document.addEventListener("click", async event => {
+        const compactMenu = event.target.closest("details.viewer-compact-menu");
+
+        // When an open menu owns the transparent full-screen dismiss layer,
+        // clicks on that layer target the <details> element itself. Close the
+        // menu before the iframe/content receives an accidental interaction.
+        if (compactMenu && compactMenu.open && event.target === compactMenu) {
+            compactMenu.removeAttribute("open");
+            return;
+        }
+
+        if (!compactMenu) {
+            closeCompactViewerMenus();
+        }
+
         const action = event.target.closest("[data-action]");
         if (!action) return;
 
@@ -272,5 +292,10 @@
             event.preventDefault();
             await handleShare(action);
         }
+    });
+
+    document.addEventListener("keydown", event => {
+        if (event.key !== "Escape") return;
+        closeCompactViewerMenus();
     });
 })();
