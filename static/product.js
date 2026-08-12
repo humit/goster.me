@@ -9,6 +9,88 @@
             button.setAttribute("title", "Bağlantıyı aç");
         }
 
+        const form = home.querySelector(".product-url-form");
+        const input = form ? form.querySelector('input[name="url"]') : null;
+
+        if (form && input) {
+            // Browser-native type=url messages vary by browser and locale and,
+            // on some mobile/desktop browsers, can still appear even with
+            // noValidate. Keep the URL keyboard via inputmode=url, but switch
+            // constraint validation to text so goster.me fully owns the UX.
+            input.type = "text";
+            form.noValidate = true;
+
+            const error = document.createElement("p");
+            error.className = "url-form-error";
+            error.setAttribute("role", "alert");
+            error.hidden = true;
+            form.insertAdjacentElement("afterend", error);
+
+            function hideUrlError() {
+                error.hidden = true;
+                error.textContent = "";
+                input.removeAttribute("aria-invalid");
+            }
+
+            function showUrlError(message) {
+                error.textContent = message;
+                error.hidden = false;
+                input.setAttribute("aria-invalid", "true");
+                input.focus();
+            }
+
+            function normalizedHttpUrl(value) {
+                const normalized = value.trim();
+                if (!normalized) return null;
+
+                try {
+                    const parsed = new URL(normalized);
+                    if (
+                        (parsed.protocol !== "http:" && parsed.protocol !== "https:")
+                        || !parsed.hostname
+                    ) {
+                        return null;
+                    }
+                } catch (_) {
+                    return null;
+                }
+
+                return normalized;
+            }
+
+            input.addEventListener("input", hideUrlError);
+            input.addEventListener("paste", () => {
+                // Let the browser perform the paste first, then normalize the
+                // common whitespace copied with URLs from messages/documents.
+                setTimeout(() => {
+                    input.value = input.value.trim();
+                    hideUrlError();
+                }, 0);
+            });
+
+            form.addEventListener("submit", event => {
+                const raw = input.value;
+                const normalized = normalizedHttpUrl(raw);
+
+                if (!raw.trim()) {
+                    event.preventDefault();
+                    showUrlError("Bir bağlantı yapıştırın.");
+                    return;
+                }
+
+                if (!normalized) {
+                    event.preventDefault();
+                    showUrlError(
+                        "Geçerli bir web bağlantısı yapıştırın (http:// veya https:// ile başlamalı)."
+                    );
+                    return;
+                }
+
+                input.value = normalized;
+                hideUrlError();
+            });
+        }
+
         const style = document.createElement("style");
         style.textContent = `
             :root {
@@ -74,6 +156,18 @@
                 border-bottom: 1px solid var(--g-border) !important;
                 border-radius: 0 !important;
                 background: transparent !important;
+            }
+
+            .url-form-error {
+                order: 1;
+                margin: .55rem 0 0 !important;
+                color: #a74646;
+                font-size: .72rem;
+                line-height: 1.35;
+            }
+
+            .url-form-error[hidden] {
+                display: none !important;
             }
 
             .product-url-form input {
