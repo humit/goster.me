@@ -198,8 +198,7 @@ Adapter geliştirmede temsilî URL'leri önce `test-adapter` ile kontrol edin; m
 
 goster.me, üçüncü taraf analytics JavaScript'i, cookie, IP adresi, User-Agent,
 referrer veya cihaz parmak izi saklamaz. Yalnızca ürünün çalışıp çalışmadığını
-anlamak için izinli olay adları ile provider, adapter, render mode, anonim kısa kod
-ve doğrulanmış kampanya etiketi kaydedilir. Kaynak URL analytics tablosuna yazılmaz.
+anlamak için izinli olay adları ile provider, adapter, render mode ve doğrulanmış kampanya etiketi kaydedilir. Kaynak URL analytics tablosuna yazılmaz.
 
 Veli grubu duyurusu için kullanılacak kampanya bağlantısı:
 
