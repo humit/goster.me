@@ -118,6 +118,24 @@ class SandboxStoreTests(unittest.TestCase):
         self.assertNotIn("gtag(", cleaned)
         self.assertIn("window.gameStarted = true", cleaned)
 
+    def test_structural_isolation_hides_sibling_branches_and_raw_text(self):
+        script = sandbox_app.structural_isolation_script("#bilge-quiz-app")
+
+        self.assertIn('document.querySelector("#bilge-quiz-app")', script)
+        self.assertIn('child.style.setProperty("display", "none", "important")', script)
+        self.assertIn("child.nodeType === Node.TEXT_NODE", script)
+        self.assertIn('child.textContent = ""', script)
+
+    def test_structural_isolation_is_injected_before_body_end(self):
+        page = "<html><body><div id='game'></div></body></html>"
+        result = sandbox_app.inject_structural_isolation(page, "#game")
+
+        script_pos = result.index('id="goster-structural-isolation"')
+        body_end_pos = result.lower().index("</body>")
+
+        self.assertLess(script_pos, body_end_pos)
+        self.assertEqual(result.count('id="goster-structural-isolation"'), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
