@@ -96,8 +96,94 @@ def strip_known_tracking_html(value: str) -> str:
     return value
 
 
+def structural_isolation_script(selector: str) -> str:
+    """Hide every sibling branch outside the selected activity root.
+
+    The legacy renderer primarily uses CSS visibility. That is intentionally
+    non-destructive, but source pages can override visibility with more
+    specific `!important` rules and raw text nodes are not elements at all.
+    This end-of-body pass keeps the selected root and its ancestor chain while
+    removing sibling layout branches from the rendered view. Scripts/styles
+    remain in the document and continue to execute normally.
+    """
+    selector_json = json.dumps(selector)
+    scroll_fix = ""
+
+    if selector == "#bilge-quiz-app":
+        scroll_fix = """
+    // Bilge Quiz can be taller than a phone viewport. The legacy isolation
+    // CSS positions every activity root absolutely, which removes its height
+    // from normal document flow and prevents mobile document scrolling.
+    document.documentElement.style.setProperty("overflow-y", "auto", "important");
+    document.body.style.setProperty("overflow-y", "auto", "important");
+    document.body.style.setProperty("height", "auto", "important");
+    document.body.style.setProperty("min-height", "100dvh", "important");
+    root.style.setProperty("position", "relative", "important");
+    root.style.setProperty("top", "auto", "important");
+    root.style.setProperty("left", "auto", "important");
+    root.style.setProperty("height", "auto", "important");
+    root.style.setProperty("min-height", "100dvh", "important");
+    root.style.setProperty("overflow", "visible", "important");
+    root.style.setProperty("-webkit-overflow-scrolling", "touch", "important");
+"""
+
+    return f"""
+<script id="goster-structural-isolation">
+(() => {{
+    const root = document.querySelector({selector_json});
+
+    if (!root || !document.body) {{
+        return;
+    }}
+
+    const path = new Set([document.body]);
+    let node = root;
+
+    while (node && node !== document.body) {{
+        path.add(node);
+        node = node.parentElement;
+    }}
+
+    for (const parent of path) {{
+        if (parent === root) {{
+            continue;
+        }}
+
+        for (const child of Array.from(parent.children)) {{
+            if (!path.has(child)) {{
+                child.style.setProperty("display", "none", "important");
+            }}
+        }}
+
+        for (const child of Array.from(parent.childNodes)) {{
+            if (
+                child.nodeType === Node.TEXT_NODE
+                && child.textContent
+                && child.textContent.trim()
+            ) {{
+                child.textContent = "";
+            }}
+        }}
+    }}
+{scroll_fix}}})();
+</script>
+"""
+
+
+def inject_structural_isolation(value: str, selector: str) -> str:
+    injection = structural_isolation_script(selector)
+    lower = value.lower()
+    body_pos = lower.rfind("</body>")
+
+    if body_pos >= 0:
+        return value[:body_pos] + injection + value[body_pos:]
+
+    return value + injection
+
+
 def valid_code(code: str) -> bool:
     normalized = code.strip().lower()
+
     return (
         len(normalized) == SHORT_CODE_LENGTH
         and all(ch in SHORT_CODE_ALPHABET for ch in normalized)
@@ -255,6 +341,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             page = legacy.render_isolated_source(item)
             page = strip_known_tracking_html(page)
+            page = inject_structural_isolation(page, item.selector or "body")
         except Exception as exc:
             self.log_error("sandbox render failed code=%s error=%r", code, exc)
             self.send_error(502)
