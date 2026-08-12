@@ -5,9 +5,8 @@ from __future__ import annotations
 import gzip
 import threading
 import time
-from html.parser import HTMLParser
 from io import BytesIO
-from urllib.parse import parse_qs, urljoin, urlparse
+from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
 from gosterme_adapters import (
@@ -18,6 +17,12 @@ from gosterme_adapters import (
     ResolvedContent,
     ResolveError,
     UnsupportedURL,
+)
+from gosterme_adapters.html import BasicHTMLParser
+from gosterme_adapters.providers import (
+    GenericWordwallPageAdapter as ProviderGenericWordwallPageAdapter,
+    WordwallDirectAdapter as ProviderWordwallDirectAdapter,
+    YouTubeAdapter as ProviderYouTubeAdapter,
 )
 
 USER_AGENT = "Mozilla/5.0 Childsafe/0.2"
@@ -209,52 +214,6 @@ def fetch_html(
     return final_url, document
 
 
-class BasicHTMLParser(HTMLParser):
-    def __init__(self):
-        super().__init__()
-
-        self.in_title = False
-        self.title_parts: list[str] = []
-        self.iframes: list[str] = []
-
-    def handle_starttag(self, tag, attrs):
-        tag = tag.lower()
-        attrs = dict(attrs)
-
-        if tag == "title":
-            self.in_title = True
-
-        elif tag == "iframe":
-            src = (
-                attrs.get("src")
-                or attrs.get("data-lazy-src")
-            )
-
-            if src:
-                self.iframes.append(src)
-
-    def handle_endtag(self, tag):
-        if tag.lower() == "title":
-            self.in_title = False
-
-    def handle_data(self, data):
-        if not self.in_title:
-            return
-
-        value = data.strip()
-
-        if value:
-            self.title_parts.append(value)
-
-    @property
-    def title(self) -> str | None:
-        value = " ".join(
-            self.title_parts
-        ).strip()
-
-        return value or None
-
-
 class ExerciseFingerprintParser(BasicHTMLParser):
     """
     Detect native exercise engines without changing the source DOM.
@@ -311,243 +270,37 @@ class NativeGameFingerprintParser(BasicHTMLParser):
             self.classes.add(cls)
 
 
-class YouTubeAdapter:
-    name = "youtube"
+class YouTubeAdapter(ProviderYouTubeAdapter):
+    """Compatibility facade using the runtime-hardened module hooks."""
 
-    HOSTS = {
-        "youtube.com",
-        "www.youtube.com",
-        "m.youtube.com",
-        "youtu.be",
-    }
-
-    def match(self, url: str) -> bool:
-        return hostname(url) in self.HOSTS
-
-    def video_id(
-        self,
-        url: str,
-    ) -> str | None:
-        parsed = urlparse(url)
-        host = (parsed.hostname or "").lower()
-
-        if host == "youtu.be":
-            return (
-                parsed.path.strip("/").split("/")[0]
-                or None
-            )
-
-        if parsed.path == "/watch":
-            return parse_qs(
-                parsed.query
-            ).get(
-                "v",
-                [None],
-            )[0]
-
-        parts = [
-            part
-            for part in parsed.path.split("/")
-            if part
-        ]
-
-        if (
-            len(parts) >= 2
-            and parts[0] in {
-                "embed",
-                "shorts",
-                "live",
-            }
-        ):
-            return parts[1]
-
-        return None
-
-    def resolve(
-        self,
-        url: str,
-    ) -> ResolvedContent:
-        url = normalized_url(url)
-
-        if not self.match(url):
-            raise NotApplicable()
-
-        video_id = self.video_id(url)
-
-        if not video_id:
-            raise NotApplicable(
-                "Could not determine YouTube video ID."
-            )
-
-        content_url = (
-            "https://www.youtube-nocookie.com/embed/"
-            + video_id
-            + "?autoplay=0"
-            + "&playsinline=1"
-            + "&rel=0"
-            + "&enablejsapi=1"
-            + "&iv_load_policy=3"
-            + "&hl=tr"
-        )
-
-        return ResolvedContent(
-            kind="video",
-            provider="youtube",
-            source_url=url,
-            content_url=content_url,
-            adapter=self.name,
-            render_mode="youtube-embed",
+    def __init__(self):
+        super().__init__(
+            normalize_url=lambda url: normalized_url(url),
+            hostname=lambda url: hostname(url),
         )
 
 
-class WordwallDirectAdapter:
-    name = "wordwall-direct"
+class WordwallDirectAdapter(ProviderWordwallDirectAdapter):
+    """Compatibility facade using the runtime-hardened module hooks."""
 
-    HOSTS = {
-        "wordwall.net",
-        "www.wordwall.net",
-    }
-
-    def match(self, url: str) -> bool:
-        return hostname(url) in self.HOSTS
-
-    def resolve(
-        self,
-        url: str,
-    ) -> ResolvedContent:
-        url = normalized_url(url)
-
-        if not self.match(url):
-            raise NotApplicable()
-
-        path = urlparse(url).path.lower()
-
-        if "/embed/" not in path:
-            raise NotApplicable(
-                "Wordwall URL is not an embed."
-            )
-
-        return ResolvedContent(
-            kind="embed",
-            provider="wordwall",
-            source_url=url,
-            content_url=url,
-            adapter=self.name,
+    def __init__(self):
+        super().__init__(
+            normalize_url=lambda url: normalized_url(url),
+            hostname=lambda url: hostname(url),
         )
 
 
-class GenericWordwallPageAdapter:
-    name = "generic-wordwall-page"
+class GenericWordwallPageAdapter(ProviderGenericWordwallPageAdapter):
+    """Compatibility facade using the centralized fetch path."""
 
-    #
-    # Real domains observed in the 1-A WhatsApp corpus.
-    #
-    SOURCE_HOSTS = {
-        "egitimgen.com",
-        "www.egitimgen.com",
-
-        "ilkokulderslerim.com",
-        "www.ilkokulderslerim.com",
-
-        "ilkokulakademi.com",
-        "www.ilkokulakademi.com",
-
-        "ogretmeninihtiyaci.com",
-        "www.ogretmeninihtiyaci.com",
-
-        "testsaati.com",
-        "www.testsaati.com",
-
-        "ilkokulevim.com",
-        "www.ilkokulevim.com",
-    }
-
-    WORDWALL_HOSTS = {
-        "wordwall.net",
-        "www.wordwall.net",
-    }
-
-    def match(self, url: str) -> bool:
-        return hostname(url) in self.SOURCE_HOSTS
-
-    def resolve(
-        self,
-        url: str,
-    ) -> ResolvedContent:
-        url = normalized_url(url)
-
-        if not self.match(url):
-            raise NotApplicable()
-
-        final_url, document = fetch_html(
-            url,
-            allowed_hosts=self.SOURCE_HOSTS,
-        )
-
-        parser = BasicHTMLParser()
-        parser.feed(document)
-
-        candidates: list[str] = []
-
-        for raw_src in parser.iframes:
-            candidate = urljoin(
-                final_url,
-                raw_src,
-            )
-
-            candidate_host = hostname(
-                candidate
-            )
-
-            if (
-                candidate_host
-                not in self.WORDWALL_HOSTS
-            ):
-                continue
-
-            candidate_path = urlparse(
-                candidate
-            ).path.lower()
-
-            if "/embed/" not in candidate_path:
-                continue
-
-            if candidate not in candidates:
-                candidates.append(candidate)
-
-        if not candidates:
-            #
-            # The source site itself is supported, but this
-            # particular page is not a Wordwall page.
-            #
-            raise NotApplicable(
-                "No Wordwall embed found."
-            )
-
-        if len(candidates) == 1:
-            return ResolvedContent(
-                kind="embed",
-                provider="wordwall",
-                source_url=url,
-                title=parser.title,
-                content_url=candidates[0],
-                content_urls=tuple(candidates),
-                adapter=self.name,
-                render_mode="embed",
-            )
-
-        return ResolvedContent(
-            kind="embed-collection",
-            provider="wordwall",
-            source_url=url,
-            title=parser.title,
-            #
-            # Keep content_url for backward compatibility.
-            #
-            content_url=candidates[0],
-            content_urls=tuple(candidates),
-            adapter=self.name,
-            render_mode="embed-collection",
+    def __init__(self):
+        super().__init__(
+            normalize_url=lambda url: normalized_url(url),
+            hostname=lambda url: hostname(url),
+            fetch_html=lambda url, allowed_hosts: fetch_html(
+                url,
+                allowed_hosts=allowed_hosts,
+            ),
         )
 
 
