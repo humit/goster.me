@@ -37,7 +37,12 @@ class PlatformSandboxTests(unittest.TestCase):
         with patch.object(platform_app.app.STORE, "get", return_value=item):
             page = platform_app.compact_preview_actions("abc346")
 
+        self.assertIn("goster.me", page)
         self.assertIn("•••", page)
+        self.assertIn(">Paylaş</button>", page)
+        self.assertIn(">QR</a>", page)
+        self.assertNotIn("← Geri", page)
+        self.assertNotIn(">Kopyala</button>", page)
         self.assertIn("Kaynak: example.com", page)
         self.assertIn("https://example.com/source/path?x=1", page)
         self.assertIn("URL'yi kopyala", page)
