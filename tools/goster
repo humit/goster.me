@@ -236,6 +236,12 @@ cmd_feedback() {
     run_app "$PYTHON" "$APP_ROOT/feedback.py" "$@"
 }
 
+cmd_analytics() {
+    require_repo
+    require_path "$PYTHON"
+    run_app "$PYTHON" "$APP_ROOT/analytics.py" "$@"
+}
+
 usage() {
     cat <<'EOF'
 Usage:
@@ -244,6 +250,7 @@ Usage:
   tools/goster stage-test
   tools/goster prod-preflight
   tools/goster prod-status
+  tools/goster analytics [--since-hours N | --since-milestone NAME] [--campaign NAME]
   tools/goster feedback list [--status unread|reviewed|all] [--limit N]
   tools/goster feedback ack <receipt>
   tools/goster feedback purge
@@ -274,6 +281,9 @@ main() {
             ;;
         prod-status)
             cmd_prod_status
+            ;;
+        analytics)
+            cmd_analytics "$@"
             ;;
         feedback)
             cmd_feedback "$@"
