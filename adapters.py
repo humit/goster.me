@@ -5,13 +5,20 @@ from __future__ import annotations
 import gzip
 import threading
 import time
-from dataclasses import asdict, dataclass
 from html.parser import HTMLParser
 from io import BytesIO
-from typing import Protocol
 from urllib.parse import parse_qs, urljoin, urlparse
 from urllib.request import Request, urlopen
 
+from gosterme_adapters import (
+    AdapterError,
+    AdapterRegistry,
+    ContentAdapter,
+    NotApplicable,
+    ResolvedContent,
+    ResolveError,
+    UnsupportedURL,
+)
 
 USER_AGENT = "Mozilla/5.0 Childsafe/0.2"
 MAX_HTML_BYTES = 2 * 1024 * 1024
@@ -24,56 +31,6 @@ _html_cache: dict[
 ] = {}
 
 _html_cache_lock = threading.Lock()
-
-
-@dataclass(frozen=True)
-class ResolvedContent:
-    kind: str
-    provider: str
-    source_url: str
-    title: str | None = None
-    content_url: str | None = None
-    content_urls: tuple[str, ...] = ()
-    adapter: str | None = None
-
-    # Rendering hints for Childsafe.
-    render_mode: str | None = None
-    selector: str | None = None
-
-    def to_dict(self) -> dict:
-        return asdict(self)
-
-
-class AdapterError(RuntimeError):
-    pass
-
-
-class UnsupportedURL(AdapterError):
-    pass
-
-
-class ResolveError(AdapterError):
-    pass
-
-
-class NotApplicable(AdapterError):
-    """
-    The adapter recognizes the URL/site, but the page does not contain
-    the content type handled by this adapter.
-
-    This is not a fatal error. The resolver should try the next adapter.
-    """
-    pass
-
-
-class ContentAdapter(Protocol):
-    name: str
-
-    def match(self, url: str) -> bool:
-        ...
-
-    def resolve(self, url: str) -> ResolvedContent:
-        ...
 
 
 def hostname(url: str) -> str:
@@ -1049,53 +1006,11 @@ def resolve_url(
     url: str,
 ) -> ResolvedContent:
     url = normalized_url(url)
-
-    matched = False
-    notes: list[str] = []
-
-    for adapter in ADAPTERS:
-        if not adapter.match(url):
-            continue
-
-        matched = True
-
-        try:
-            return adapter.resolve(url)
-
-        except NotApplicable as exc:
-            if str(exc):
-                notes.append(
-                    f"{adapter.name}: {exc}"
-                )
-
-            continue
-
-    if matched:
-        details = "; ".join(notes)
-
-        message = (
-            "URL belongs to a known source, "
-            "but no content adapter could resolve it."
-        )
-
-        if details:
-            message += f" ({details})"
-
-        raise UnsupportedURL(message)
-
-    raise UnsupportedURL(
-        "No adapter supports host: "
-        f"{hostname(url)}"
-    )
+    return AdapterRegistry(ADAPTERS).resolve(url, hostname=hostname)
 
 
 def matching_adapters(
     url: str,
 ) -> list[str]:
     url = normalized_url(url)
-
-    return [
-        adapter.name
-        for adapter in ADAPTERS
-        if adapter.match(url)
-    ]
+    return AdapterRegistry(ADAPTERS).matching_names(url)
