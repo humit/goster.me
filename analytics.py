@@ -24,6 +24,16 @@ EVENTS = frozenset({
     "share_click",
 })
 
+# Product timeline milestones are fixed Unix timestamps so reports remain independent
+# of the server timezone. 2026-08-12 14:31 Europe/Istanbul = 11:31 UTC.
+MILESTONES = {
+    "first-parent-whatsapp-announcement": 1786534260,
+}
+MILESTONE_AUDIENCE_SIZES = {
+    # Parent WhatsApp group membership at announcement time, including the sender.
+    "first-parent-whatsapp-announcement": 49,
+}
+
 
 def clean_campaign(value: str | None) -> str | None:
     candidate = (value or "").strip().lower()
@@ -111,14 +121,23 @@ class AnalyticsStore:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Privacy-focused goster.me analytics report")
-    parser.add_argument("--since-hours", type=int, default=24)
+    since_group = parser.add_mutually_exclusive_group()
+    since_group.add_argument("--since-hours", type=int)
+    since_group.add_argument("--since-milestone", choices=sorted(MILESTONES))
     parser.add_argument("--campaign")
     args = parser.parse_args()
-    if args.since_hours <= 0:
+    if args.since_hours is not None and args.since_hours <= 0:
         parser.error("--since-hours must be positive")
+
+    milestone = args.since_milestone
+    since_hours = 24 if args.since_hours is None and milestone is None else args.since_hours
+    since = MILESTONES[milestone] if milestone else int(time.time()) - since_hours * 60 * 60
+
     store = AnalyticsStore()
-    since = int(time.time()) - args.since_hours * 60 * 60
-    print(f"goster.me analytics since_hours={args.since_hours} campaign={clean_campaign(args.campaign) or 'all'}")
+    window = f"milestone={milestone}" if milestone else f"since_hours={since_hours}"
+    print(f"goster.me analytics {window} campaign={clean_campaign(args.campaign) or 'all'}")
+    if milestone:
+        print(f"audience_size={MILESTONE_AUDIENCE_SIZES.get(milestone, 'unknown')}")
     for event, count in store.summary(since=since, campaign=args.campaign):
         print(f"{event:20} {count}")
 

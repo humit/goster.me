@@ -8,7 +8,7 @@ import unittest
 
 from pathlib import Path
 
-from analytics import AnalyticsStore, clean_campaign
+from analytics import AnalyticsStore, MILESTONES, MILESTONE_AUDIENCE_SIZES, clean_campaign
 
 
 class AnalyticsStoreTests(unittest.TestCase):
@@ -41,6 +41,10 @@ class AnalyticsStoreTests(unittest.TestCase):
     def test_invalid_campaign_is_discarded(self):
         self.assertIsNone(clean_campaign("parent@example.com"))
         self.assertEqual(clean_campaign("Veli-WhatsApp-2026-08"), "veli-whatsapp-2026-08")
+
+    def test_first_parent_announcement_milestone_is_stable(self):
+        self.assertEqual(MILESTONES["first-parent-whatsapp-announcement"], 1786534260)
+        self.assertEqual(MILESTONE_AUDIENCE_SIZES["first-parent-whatsapp-announcement"], 49)
 
     def test_purge_removes_only_expired_raw_events(self):
         self.store.record("landing_view", now=100)
