@@ -22,6 +22,7 @@ import adapters
 import public_app as legacy
 
 from analytics import AnalyticsStore, clean_campaign
+from feedback import FeedbackStore, MESSAGE_MAX_LENGTH, normalize_submission
 
 from security import (
     SecurityValidationError,
@@ -43,6 +44,7 @@ HOST = os.environ.get("GOSTER_HOST", legacy.HOST)
 PORT = int(os.environ.get("GOSTER_PORT", str(legacy.PORT)))
 STORE = ShortLinkStore()
 ANALYTICS = AnalyticsStore(STORE.path)
+FEEDBACK = FeedbackStore(STORE.path)
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "static"
 PUBLIC_ORIGIN = public_origin()
@@ -52,6 +54,12 @@ RESOLVE_RATE_PER_MINUTE = int(
 )
 TRUST_PROXY = os.environ.get("GOSTER_TRUST_PROXY", "0") == "1"
 MAX_RATE_CLIENTS = int(os.environ.get("GOSTER_MAX_RATE_CLIENTS", "10000"))
+FEEDBACK_RATE_PER_HOUR = int(
+    os.environ.get("GOSTER_FEEDBACK_RATE_PER_HOUR", "5")
+)
+MAX_FEEDBACK_POST_BYTES = int(
+    os.environ.get("GOSTER_MAX_FEEDBACK_POST_BYTES", "4096")
+)
 
 SHORT_CODE_RE = re.compile(
     rf"^[{re.escape(SHORT_CODE_ALPHABET)}]"
@@ -60,6 +68,7 @@ SHORT_CODE_RE = re.compile(
 
 _rate_lock = threading.Lock()
 _rate_clients: OrderedDict[str, deque[float]] = OrderedDict()
+_feedback_rate_clients: OrderedDict[str, deque[float]] = OrderedDict()
 
 _ORIGINAL_FETCH_HTML = adapters.fetch_html
 _ORIGINAL_YOUTUBE_VIDEO_ID = adapters.YouTubeAdapter.video_id
@@ -197,7 +206,7 @@ def render_home(campaign: str | None = None) -> str:
 
         <nav class="minimal-links" aria-label="Bilgi">
             <a href="/about">Hakkında</a>
-            <a href="https://github.com/humit/goster.me/issues/new" rel="noopener noreferrer" target="_blank">İletişim</a>
+            <a href="/contact">İletişim</a>
         </nav>
     </section>
 </main>
@@ -255,6 +264,94 @@ def render_about() -> str:
             </a>
         </p>
     </article>
+</main>
+""",
+    )
+
+
+def render_contact(
+    *,
+    category: str = "problem",
+    message: str = "",
+    error: str = "",
+) -> str:
+    options = []
+    for value, label in (
+        ("problem", "Bir sorun bildirmek istiyorum"),
+        ("suggestion", "Bir önerim var"),
+        ("other", "Başka bir konu"),
+    ):
+        selected = " selected" if value == category else ""
+        options.append(f'<option value="{value}"{selected}>{label}</option>')
+
+    error_html = (
+        f'<p class="form-error" role="alert">{escape(error)}</p>'
+        if error
+        else ""
+    )
+    return product_document(
+        "İletişim — goster.me",
+        f"""
+<main class="contact-page">
+    <header class="info-header">
+        <a class="product-wordmark" href="/">goster.me</a>
+        <a class="text-link" href="/">← Geri</a>
+    </header>
+
+    <section class="contact-content" aria-labelledby="contact-title">
+        <h1 id="contact-title">Mesaj bırak</h1>
+        <p class="contact-lead">
+            Karşılaştığınız sorunu veya önerinizi yazabilirsiniz. Mesajınız
+            herkese açık olmaz; yalnızca proje yöneticisi tarafından okunur.
+        </p>
+        {error_html}
+        <form class="contact-form" method="post" action="/contact">
+            <label for="category">Konu</label>
+            <select id="category" name="category" required>
+                {''.join(options)}
+            </select>
+
+            <label for="message">Mesajınız</label>
+            <textarea
+                id="message"
+                name="message"
+                rows="7"
+                minlength="3"
+                maxlength="{MESSAGE_MAX_LENGTH}"
+                required
+            >{escape(message)}</textarea>
+
+            <div class="form-trap" aria-hidden="true">
+                <label for="website">Web sitesi</label>
+                <input id="website" name="website" type="text" tabindex="-1" autocomplete="off">
+            </div>
+
+            <p class="form-privacy">
+                Lütfen çocuk adı, telefon, e-posta veya başka kişisel bilgi
+                yazmayın. Bu form üzerinden doğrudan yanıt gönderemiyoruz.
+            </p>
+            <button type="submit">Mesajı gönder</button>
+        </form>
+    </section>
+</main>
+""",
+    )
+
+
+def render_feedback_received() -> str:
+    return product_document(
+        "Mesajınız alındı — goster.me",
+        """
+<main class="contact-page">
+    <header class="info-header">
+        <a class="product-wordmark" href="/">goster.me</a>
+        <a class="text-link" href="/">← Ana sayfa</a>
+    </header>
+    <section class="contact-content">
+        <h1>Mesajınız alındı.</h1>
+        <p class="contact-lead">Paylaştığınız geri bildirim için teşekkürler.</p>
+        <a class="contact-return" href="/">Ana sayfaya dön</a>
+    </section>
 </main>
 """,
     )
@@ -438,6 +535,39 @@ def allow_resolve(client: str) -> bool:
         return True
 
 
+def allow_feedback(client: str) -> bool:
+    if FEEDBACK_RATE_PER_HOUR <= 0:
+        return True
+
+    now = time.monotonic()
+    cutoff = now - 3600.0
+
+    with _rate_lock:
+        bucket = _feedback_rate_clients.get(client)
+        if bucket is None:
+            if len(_feedback_rate_clients) >= MAX_RATE_CLIENTS:
+                _feedback_rate_clients.popitem(last=False)
+            bucket = deque()
+            _feedback_rate_clients[client] = bucket
+        else:
+            _feedback_rate_clients.move_to_end(client)
+
+        while bucket and bucket[0] <= cutoff:
+            bucket.popleft()
+        if len(bucket) >= FEEDBACK_RATE_PER_HOUR:
+            return False
+        bucket.append(now)
+        return True
+
+
+def same_origin_request(handler) -> bool:
+    fetch_site = handler.headers.get("Sec-Fetch-Site", "")
+    if fetch_site and fetch_site not in {"same-origin", "none"}:
+        return False
+    origin = handler.headers.get("Origin")
+    return origin is None or origin.rstrip("/") == PUBLIC_ORIGIN.rstrip("/")
+
+
 class Handler(legacy.Handler):
     server_version = "GosterMe/0.4"
 
@@ -508,6 +638,14 @@ class Handler(legacy.Handler):
 
         if path == "/about":
             self.send_html(200, render_about())
+            return
+
+        if path == "/contact" and not parsed.query:
+            self.send_html(200, render_contact())
+            return
+
+        if path == "/contact/thanks" and not parsed.query:
+            self.send_html(200, render_feedback_received())
             return
 
         # Source HTML/JavaScript must never be served from the main origin.
@@ -622,6 +760,10 @@ class Handler(legacy.Handler):
             self.handle_product_event()
             return
 
+        if parsed.path == "/contact" and not parsed.query:
+            self.handle_feedback()
+            return
+
         if parsed.path != "/resolve":
             self.send_error(404)
             return
@@ -721,6 +863,87 @@ class Handler(legacy.Handler):
             render_mode=item.render_mode,
         )
         self.redirect(f"/{item_id}")
+
+    def handle_feedback(self) -> None:
+        if not same_origin_request(self):
+            self.send_error(403)
+            return
+        if not allow_feedback(client_ip(self)):
+            self.send_response(429)
+            self.send_header("Retry-After", "3600")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+
+        content_type = self.headers.get("Content-Type", "")
+        media_type = content_type.split(";", 1)[0].strip().lower()
+        if media_type != "application/x-www-form-urlencoded":
+            self.send_error(415)
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+        if length <= 0 or length > MAX_FEEDBACK_POST_BYTES:
+            self.send_error(400)
+            return
+
+        category = "problem"
+        message = ""
+        try:
+            raw = self.rfile.read(length).decode("utf-8", errors="strict")
+            data = parse_qs(
+                raw,
+                keep_blank_values=True,
+                strict_parsing=True,
+                max_num_fields=5,
+            )
+            if set(data) != {"category", "message", "website"}:
+                raise ValueError("Unexpected form fields.")
+            if any(len(values) != 1 for values in data.values()):
+                raise ValueError("Repeated form fields.")
+
+            category = data["category"][0]
+            message = data["message"][0]
+            website = data["website"][0]
+            normalized_category, normalized_message = normalize_submission(
+                category, message, website
+            )
+            FEEDBACK.submit(normalized_category, normalized_message)
+        except (UnicodeError, ValueError):
+            # A filled honeypot gets the same response as a real submission so
+            # automated senders do not learn how to bypass it.
+            if "website" in locals() and website:
+                self.redirect("/contact/thanks")
+                return
+            self.send_html(
+                400,
+                render_contact(
+                    category=(
+                        category
+                        if category in {"problem", "suggestion", "other"}
+                        else "problem"
+                    ),
+                    message=message[:MESSAGE_MAX_LENGTH],
+                    error="Mesaj gönderilemedi. Alanları kontrol edip yeniden deneyin.",
+                ),
+            )
+            return
+        except Exception as exc:
+            request_id = f"{int(time.time()):x}-{threading.get_ident():x}"
+            self.log_error("feedback failed request_id=%s error=%r", request_id, exc)
+            self.send_html(
+                500,
+                render_security_error(
+                    "Bir sorun oluştu",
+                    f"Mesaj kaydedilemedi. Hata kodu: {request_id}",
+                ),
+            )
+            return
+
+        ANALYTICS.record("feedback_submitted")
+        # Post/Redirect/Get prevents a browser refresh from duplicating a message.
+        self.redirect("/contact/thanks")
 
     def handle_product_event(self) -> None:
         try:

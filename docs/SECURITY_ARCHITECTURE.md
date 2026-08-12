@@ -79,6 +79,12 @@ The system removes known advertising and analytics execution from isolated conte
 
 These are defense-in-depth and privacy measures. They do not replace origin separation or browser sandboxing.
 
+The public feedback form stores only an allowlisted category, message text, receipt,
+timestamps and review state. It does not request or persist a name, reply address,
+IP address, User-Agent or referrer. Feedback is private to the operator, bounded by
+row and database limits, protected by request and abuse controls, and automatically
+removed after the configured retention window.
+
 ## Storage and process controls
 
 Application storage is bounded using row, payload and database-growth controls, with periodic maintenance of expired data.

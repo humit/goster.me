@@ -217,6 +217,25 @@ Ham analytics olayları varsayılan olarak 30 gün tutulur ve mevcut
 `gosterme-storage-maintenance.timer` tarafından temizlenir. Süre
 `GOSTER_ANALYTICS_RETENTION_SECONDS` ile değiştirilebilir.
 
+## Özel geri bildirim
+
+Ana sayfadaki **İletişim** bağlantısı, GitHub hesabı gerektirmeyen yerel bir mesaj
+formu açar. Mesajlar herkese açık değildir ve yalnızca proje yöneticisinin CLI
+üzerinden okuyabildiği SQLite tablosunda tutulur. Form ad, e-posta, telefon, IP,
+User-Agent veya referrer istemez ve saklamaz. Kullanıcıdan çocuk adı veya başka
+kişisel bilgi yazmaması açıkça istenir.
+
+Okunmamış mesajları listelemek ve bir mesajı incelendi olarak işaretlemek için:
+
+```bash
+tools/goster feedback list
+tools/goster feedback ack <receipt>
+```
+
+Mesajlar varsayılan olarak 90 gün sonra storage maintenance sırasında silinir.
+Form, bellek içi rate limiting, form boyutu sınırı, alan allowlist'i, same-origin
+kontrolü ve görünmez spam alanı ile korunur.
+
 ## Güvenlik yaklaşımı
 
 goster.me unrestricted web proxy değildir. Temel yaklaşım **content minimization**dır:
