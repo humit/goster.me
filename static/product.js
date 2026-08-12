@@ -238,13 +238,18 @@
         showToast(ok ? "Bağlantı kopyalandı" : "Bağlantı kopyalanamadı");
     }
 
+    function shareMessage(title, url) {
+        return `${title}\n\ngoster.me ile dikkat dağıtıcı öğelerden arındırılmış temiz görünüm:\n${url}`;
+    }
+
     async function handleShare(element) {
         const url = actionUrl(element);
         const title = element.dataset.title || document.title;
+        const text = `${title}\n\ngoster.me ile dikkat dağıtıcı öğelerden arındırılmış temiz görünüm:`;
 
         if (navigator.share) {
             try {
-                await navigator.share({ title, url });
+                await navigator.share({ title, text, url });
                 recordProductEvent("share_click", element);
                 return;
             } catch (error) {
@@ -254,8 +259,8 @@
             }
         }
 
-        const ok = await copyText(url);
-        showToast(ok ? "Paylaşım desteklenmedi; bağlantı kopyalandı" : "Bu tarayıcıda paylaşım kullanılamıyor");
+        const ok = await copyText(shareMessage(title, url));
+        showToast(ok ? "Paylaşım metni kopyalandı" : "Bu tarayıcıda paylaşım kullanılamıyor");
     }
 
     function closeCompactViewerMenus(except = null) {
