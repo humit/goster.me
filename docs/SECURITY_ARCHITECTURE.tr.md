@@ -99,7 +99,9 @@ Public geri bildirim formu yalnızca allowlist içindeki konu türünü, mesaj m
 alındı kodunu, timestamp'leri ve inceleme durumunu saklar. Ad, yanıt adresi, IP
 adresi, User-Agent veya referrer istemez ve kalıcılaştırmaz. Geri bildirim yalnızca
 operatör tarafından görülebilir; row/database limitleri, request/abuse kontrolleri
-ve otomatik retention temizliği ile sınırlandırılır.
+ve otomatik retention temizliği ile sınırlandırılır. Form, browser origin metadata
+farklarına karşı kısa ömürlü imzalı token fallback'i kullanır; token cookie
+gerektirmez ve visitor identifier içermez.
 
 Geçerli fakat desteklenmeyen hedefler bounded bir adapter backlog’unda ayrı tutulur.
 Query string ve fragment atılır, kimlik benzeri path parçaları maskelenir, tekrar eden

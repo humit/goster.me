@@ -95,12 +95,88 @@ class ProductContactTests(unittest.TestCase):
             error="Tekrar deneyin.",
         )
         self.assertIn('action="/contact"', page)
+        self.assertIn('type="hidden" name="form_token"', page)
         self.assertIn('value="suggestion" selected', page)
         self.assertIn('&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;', page)
         self.assertNotIn('<script>alert("x")</script>', page)
         self.assertNotIn('name="email"', page)
         self.assertNotIn('name="phone"', page)
         self.assertNotIn('name="name"', page)
+
+    def test_feedback_form_token_is_signed_and_expires(self):
+        token = product_app.issue_feedback_form_token(now=1_000_000)
+
+        self.assertTrue(
+            product_app.valid_feedback_form_token(token, now=1_000_001)
+        )
+        self.assertFalse(
+            product_app.valid_feedback_form_token(token + "x", now=1_000_001)
+        )
+        self.assertFalse(
+            product_app.valid_feedback_form_token(
+                token,
+                now=1_000_000 + product_app.FEEDBACK_FORM_TOKEN_TTL_SECONDS + 1,
+            )
+        )
+
+    def test_private_origin_feedback_uses_signed_form_token(self):
+        form_token = product_app.issue_feedback_form_token()
+        body = urllib.parse.urlencode(
+            {
+                "category": "suggestion",
+                "message": "Safari submission",
+                "website": "",
+                "form_token": form_token,
+            }
+        ).encode()
+        with (
+            patch.object(product_app, "allow_feedback", return_value=True),
+            patch.object(product_app.FEEDBACK, "submit") as submit,
+            patch.object(product_app.ANALYTICS, "record"),
+        ):
+            handler = product_app.Handler.__new__(product_app.Handler)
+            handler.path = "/contact"
+            handler.client_address = ("203.0.113.10", 12345)
+            handler.headers = {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Content-Length": str(len(body)),
+                "Origin": "null",
+            }
+            handler.rfile = io.BytesIO(body)
+            handler.redirect = Mock()
+            handler.send_error = Mock()
+
+            handler.do_POST()
+
+            submit.assert_called_once_with("suggestion", "Safari submission")
+            handler.redirect.assert_called_once_with("/contact/thanks")
+            handler.send_error.assert_not_called()
+
+    def test_invalid_form_token_is_rejected_before_rate_limit(self):
+        body = urllib.parse.urlencode(
+            {
+                "category": "problem",
+                "message": "Cross-site submission",
+                "website": "",
+                "form_token": "invalid",
+            }
+        ).encode()
+        with patch.object(product_app, "allow_feedback") as allow_feedback:
+            handler = product_app.Handler.__new__(product_app.Handler)
+            handler.path = "/contact"
+            handler.client_address = ("203.0.113.10", 12345)
+            handler.headers = {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Content-Length": str(len(body)),
+                "Origin": "null",
+            }
+            handler.rfile = io.BytesIO(body)
+            handler.send_error = Mock()
+
+            handler.do_POST()
+
+            handler.send_error.assert_called_once_with(403)
+            allow_feedback.assert_not_called()
 
     def test_cross_site_feedback_is_rejected(self):
         same_origin = SimpleNamespace(

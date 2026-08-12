@@ -83,7 +83,9 @@ The public feedback form stores only an allowlisted category, message text, rece
 timestamps and review state. It does not request or persist a name, reply address,
 IP address, User-Agent or referrer. Feedback is private to the operator, bounded by
 row and database limits, protected by request and abuse controls, and automatically
-removed after the configured retention window.
+removed after the configured retention window. The form uses short-lived signed
+tokens as a browser-compatible fallback to origin metadata; the tokens require no
+cookie and contain no visitor identifier.
 
 Valid but unsupported targets are stored separately as a bounded adapter backlog.
 Query strings and fragments are discarded, likely identifier-like path segments are

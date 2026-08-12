@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import html
 import io
 import json
 import os
 import re
+import secrets
 import threading
 import time
 
@@ -62,6 +65,7 @@ FEEDBACK_RATE_PER_HOUR = int(
 MAX_FEEDBACK_POST_BYTES = int(
     os.environ.get("GOSTER_MAX_FEEDBACK_POST_BYTES", "4096")
 )
+FEEDBACK_FORM_TOKEN_TTL_SECONDS = 60 * 60
 
 SHORT_CODE_RE = re.compile(
     rf"^[{re.escape(SHORT_CODE_ALPHABET)}]"
@@ -71,6 +75,7 @@ SHORT_CODE_RE = re.compile(
 _rate_lock = threading.Lock()
 _rate_clients: OrderedDict[str, deque[float]] = OrderedDict()
 _feedback_rate_clients: OrderedDict[str, deque[float]] = OrderedDict()
+_feedback_form_key = secrets.token_bytes(32)
 
 _ORIGINAL_FETCH_HTML = adapters.fetch_html
 _ORIGINAL_YOUTUBE_VIDEO_ID = adapters.YouTubeAdapter.video_id
@@ -79,6 +84,44 @@ _ORIGINAL_RESOLVE_URL = legacy.resolve_url
 
 def escape(value: str | None) -> str:
     return html.escape(value or "", quote=True)
+
+
+def issue_feedback_form_token(*, now: int | None = None) -> str:
+    issued_at = int(time.time() if now is None else now)
+    payload = f"{issued_at}.{secrets.token_urlsafe(18)}"
+    signature = hmac.new(
+        _feedback_form_key,
+        payload.encode("ascii"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{payload}.{signature}"
+
+
+def valid_feedback_form_token(token: str, *, now: int | None = None) -> bool:
+    if len(token) > 128:
+        return False
+    try:
+        issued_text, nonce, signature = token.split(".")
+        issued_at = int(issued_text)
+    except (TypeError, ValueError):
+        return False
+    if not re.fullmatch(r"[A-Za-z0-9_-]{20,32}", nonce):
+        return False
+    if not re.fullmatch(r"[0-9a-f]{64}", signature):
+        return False
+
+    checked_at = int(time.time() if now is None else now)
+    age = checked_at - issued_at
+    if age < -60 or age > FEEDBACK_FORM_TOKEN_TTL_SECONDS:
+        return False
+
+    payload = f"{issued_text}.{nonce}"
+    expected = hmac.new(
+        _feedback_form_key,
+        payload.encode("ascii"),
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(signature, expected)
 
 
 def hardened_normalized_url(url: str) -> str:
@@ -288,6 +331,7 @@ def render_contact(
     message: str = "",
     error: str = "",
 ) -> str:
+    form_token = issue_feedback_form_token()
     options = []
     for value, label in (
         ("problem", "Bir sorun bildirmek istiyorum"),
@@ -319,6 +363,8 @@ def render_contact(
         </p>
         {error_html}
         <form class="contact-form" method="post" action="/contact">
+            <input type="hidden" name="form_token" value="{form_token}">
+
             <label for="category">Konu</label>
             <select id="category" name="category" required>
                 {''.join(options)}
@@ -909,16 +955,6 @@ class Handler(legacy.Handler):
         self.redirect(f"/{item_id}")
 
     def handle_feedback(self) -> None:
-        if not same_origin_request(self):
-            self.send_error(403)
-            return
-        if not allow_feedback(client_ip(self)):
-            self.send_response(429)
-            self.send_header("Retry-After", "3600")
-            self.send_header("Content-Length", "0")
-            self.end_headers()
-            return
-
         content_type = self.headers.get("Content-Type", "")
         media_type = content_type.split(";", 1)[0].strip().lower()
         if media_type != "application/x-www-form-urlencoded":
@@ -934,15 +970,16 @@ class Handler(legacy.Handler):
 
         category = "problem"
         message = ""
+        website = ""
         try:
             raw = self.rfile.read(length).decode("utf-8", errors="strict")
             data = parse_qs(
                 raw,
                 keep_blank_values=True,
                 strict_parsing=True,
-                max_num_fields=5,
+                max_num_fields=6,
             )
-            if set(data) != {"category", "message", "website"}:
+            if set(data) != {"category", "message", "website", "form_token"}:
                 raise ValueError("Unexpected form fields.")
             if any(len(values) != 1 for values in data.values()):
                 raise ValueError("Repeated form fields.")
@@ -950,16 +987,46 @@ class Handler(legacy.Handler):
             category = data["category"][0]
             message = data["message"][0]
             website = data["website"][0]
+        except (UnicodeError, ValueError):
+            self.send_html(
+                400,
+                render_contact(
+                    category=(
+                        category
+                        if category in {"problem", "suggestion", "other"}
+                        else "problem"
+                    ),
+                    message=message[:MESSAGE_MAX_LENGTH],
+                    error="Mesaj gönderilemedi. Alanları kontrol edip yeniden deneyin.",
+                ),
+            )
+            return
+
+        # A filled honeypot gets the same response as a real submission so
+        # automated senders do not learn how to bypass it.
+        if website:
+            self.redirect("/contact/thanks")
+            return
+
+        if not same_origin_request(self) and not valid_feedback_form_token(
+            data["form_token"][0]
+        ):
+            self.send_error(403)
+            return
+
+        if not allow_feedback(client_ip(self)):
+            self.send_response(429)
+            self.send_header("Retry-After", "3600")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+
+        try:
             normalized_category, normalized_message = normalize_submission(
                 category, message, website
             )
             FEEDBACK.submit(normalized_category, normalized_message)
-        except (UnicodeError, ValueError):
-            # A filled honeypot gets the same response as a real submission so
-            # automated senders do not learn how to bypass it.
-            if "website" in locals() and website:
-                self.redirect("/contact/thanks")
-                return
+        except ValueError:
             self.send_html(
                 400,
                 render_contact(
