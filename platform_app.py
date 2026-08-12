@@ -42,7 +42,8 @@ def compact_preview_actions(
     *,
     back_href: str = "/",
 ) -> str:
-    """Render low-profile viewer controls without linking to the source site."""
+    """Render compact branded viewer controls without linking to the source site."""
+    del back_href
     canonical = f"/{app.escape(item_id)}"
     item = app.STORE.get(item_id, touch=False)
     source_url = item.source_url if item is not None else ""
@@ -59,27 +60,38 @@ def compact_preview_actions(
     font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }}
 .viewer-compact-menu > summary {{
-    width: 2.35rem;
-    height: 2.35rem;
-    display: grid;
-    place-items: center;
+    min-width: 5.9rem;
+    height: 2.45rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .34rem;
+    padding: 0 .72rem;
+    box-sizing: border-box;
     list-style: none;
     cursor: pointer;
-    border: 1px solid rgba(255,255,255,.16);
+    border: 1px solid rgba(255,255,255,.2);
     border-radius: 999px;
-    background: rgba(9,11,14,.42);
+    background: rgba(9,11,14,.72);
     color: #fff;
-    opacity: .42;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    font-size: 1.05rem;
+    opacity: .78;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    font-size: .72rem;
+    font-weight: 680;
+    letter-spacing: -.015em;
     line-height: 1;
     user-select: none;
 }}
 .viewer-compact-menu > summary::-webkit-details-marker {{ display: none; }}
 .viewer-compact-menu > summary:hover,
 .viewer-compact-menu > summary:focus-visible,
-.viewer-compact-menu[open] > summary {{ opacity: .95; }}
+.viewer-compact-menu[open] > summary {{ opacity: 1; }}
+.viewer-compact-dots {{
+    font-size: 1rem;
+    letter-spacing: .08em;
+    transform: translateY(-.06rem);
+}}
 .viewer-compact-panel {{
     position: absolute;
     right: 0;
@@ -98,7 +110,6 @@ def compact_preview_actions(
     display: flex;
     gap: .35rem;
     align-items: center;
-    flex-wrap: wrap;
 }}
 .viewer-compact-action,
 .viewer-source-summary {{
@@ -116,6 +127,7 @@ def compact_preview_actions(
     text-decoration: none;
     cursor: pointer;
 }}
+.viewer-compact-row .viewer-compact-action {{ flex: 1; }}
 .viewer-source {{ margin-top: .4rem; }}
 .viewer-source-summary {{
     width: 100%;
@@ -136,14 +148,15 @@ def compact_preview_actions(
 }}
 @media (max-width: 430px) {{
     .viewer-compact-menu {{ right: max(.35rem, env(safe-area-inset-right)); top: 56%; }}
+    .viewer-compact-menu > summary {{ min-width: 5.6rem; }}
 }}
 </style>
 <details class="viewer-compact-menu">
-    <summary aria-label="goster.me menüsü" title="goster.me menüsü">•••</summary>
+    <summary aria-label="goster.me menüsü" title="goster.me menüsü">
+        <span>goster.me</span><span class="viewer-compact-dots" aria-hidden="true">•••</span>
+    </summary>
     <div class="viewer-compact-panel">
         <div class="viewer-compact-row">
-            <a class="viewer-compact-action" href="{app.escape(back_href)}">← Geri</a>
-            <button class="viewer-compact-action" type="button" data-action="copy" data-url="{canonical}">Kopyala</button>
             <button class="viewer-compact-action" type="button" data-action="share" data-url="{canonical}">Paylaş</button>
             <a class="viewer-compact-action" href="/q/{app.escape(item_id)}" data-action="qr">QR</a>
         </div>
