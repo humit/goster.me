@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import io
+import json
 import os
 import re
 import threading
@@ -19,6 +20,8 @@ import segno
 
 import adapters
 import public_app as legacy
+
+from analytics import AnalyticsStore, clean_campaign
 
 from security import (
     SecurityValidationError,
@@ -39,6 +42,7 @@ from shortlinks import (
 HOST = os.environ.get("GOSTER_HOST", legacy.HOST)
 PORT = int(os.environ.get("GOSTER_PORT", str(legacy.PORT)))
 STORE = ShortLinkStore()
+ANALYTICS = AnalyticsStore(STORE.path)
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "static"
 PUBLIC_ORIGIN = public_origin()
@@ -161,15 +165,19 @@ def product_document(title: str, body: str) -> str:
 legacy.document = product_document
 
 
-def render_home() -> str:
+def render_home(campaign: str | None = None) -> str:
+    action = "/resolve"
+    if campaign:
+        action += f"?campaign={escape(campaign)}"
+
     return product_document(
         "goster.me",
-        """
+        f"""
 <main class="product-home product-home-minimal">
     <section class="minimal-shell" aria-labelledby="home-title">
         <h1 id="home-title" class="minimal-wordmark">goster.me</h1>
 
-        <form class="url-form product-url-form" method="post" action="/resolve">
+        <form class="url-form product-url-form" method="post" action="{action}">
             <label for="url">Bağlantı</label>
             <input
                 id="url"
@@ -489,6 +497,15 @@ class Handler(legacy.Handler):
         path = parsed.path
         parts = [part for part in path.split("/") if part]
 
+        if path == "/":
+            query = parse_qs(parsed.query, keep_blank_values=True)
+            campaign = None
+            if set(query).issubset({"from"}) and len(query.get("from", [])) <= 1:
+                campaign = clean_campaign((query.get("from") or [None])[0])
+            ANALYTICS.record("landing_view", campaign=campaign)
+            self.send_html(200, render_home(campaign))
+            return
+
         if path == "/about":
             self.send_html(200, render_about())
             return
@@ -575,6 +592,13 @@ class Handler(legacy.Handler):
                 # Count only content that is actually served.
                 item = STORE.get(code)
 
+                ANALYTICS.record(
+                    "viewer_open",
+                    provider=item.provider,
+                    adapter=item.adapter,
+                    render_mode=item.render_mode,
+                    code=code,
+                )
                 self.send_html(
                     200,
                     legacy.render_child(code, item),
@@ -595,9 +619,19 @@ class Handler(legacy.Handler):
     def do_POST(self):
         parsed = urlparse(self.path)
 
-        if parsed.path != "/resolve" or parsed.query:
+        if parsed.path == "/api/events" and not parsed.query:
+            self.handle_product_event()
+            return
+
+        if parsed.path != "/resolve":
             self.send_error(404)
             return
+
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        if not set(query).issubset({"campaign"}) or len(query.get("campaign", [])) > 1:
+            self.send_error(404)
+            return
+        campaign = clean_campaign((query.get("campaign") or [None])[0])
 
         if not allow_resolve(client_ip(self)):
             self.send_response(429)
@@ -648,10 +682,12 @@ class Handler(legacy.Handler):
                 raise ValueError("Unexpected form fields.")
 
             url = validate_public_url(data["url"][0].strip())
+            ANALYTICS.record("resolve_attempt", campaign=campaign)
             item = hardened_resolve_url(url)
             item_id = save_item(item)
 
         except (ValueError, SecurityValidationError, adapters.AdapterError):
+            ANALYTICS.record("resolve_failure", campaign=campaign, outcome="unsupported")
             self.send_html(
                 400,
                 render_security_error(
@@ -662,6 +698,7 @@ class Handler(legacy.Handler):
             return
 
         except Exception as exc:
+            ANALYTICS.record("resolve_failure", campaign=campaign, outcome="internal")
             request_id = f"{int(time.time()):x}-{threading.get_ident():x}"
             self.log_error(
                 "resolve failed request_id=%s error=%r",
@@ -677,7 +714,51 @@ class Handler(legacy.Handler):
             )
             return
 
+        ANALYTICS.record(
+            "resolve_success",
+            campaign=campaign,
+            provider=item.provider,
+            adapter=item.adapter,
+            render_mode=item.render_mode,
+            code=item_id,
+        )
         self.redirect(f"/{item_id}")
+
+    def handle_product_event(self) -> None:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+        if length <= 0 or length > 256:
+            self.send_error(400)
+            return
+        if self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() != "application/json":
+            self.send_error(415)
+            return
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8", errors="strict"))
+            if not isinstance(payload, dict) or set(payload) != {"event", "code"}:
+                raise ValueError
+            event = payload["event"]
+            code = payload["code"]
+            if event not in {"copy_click", "share_click"} or not isinstance(code, str):
+                raise ValueError
+            item = STORE.get(code, touch=False)
+            if item is None:
+                raise ValueError
+            ANALYTICS.record(
+                event,
+                provider=item.provider,
+                adapter=item.adapter,
+                render_mode=item.render_mode,
+                code=code,
+            )
+        except (UnicodeError, ValueError, json.JSONDecodeError):
+            self.send_error(400)
+            return
+        self.send_response(204)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
 
 def ttl_days() -> float:
