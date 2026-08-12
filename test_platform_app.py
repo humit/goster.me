@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import unittest
+from http.server import BaseHTTPRequestHandler
 from unittest.mock import patch
 
 import platform_app
+import sandbox_app
 
 from adapters import ResolvedContent
 
@@ -46,6 +48,19 @@ class PlatformSandboxTests(unittest.TestCase):
             "allow-pointer-lock allow-presentation\"",
             page,
         )
+
+    def test_sandbox_csp_allows_storage_but_keeps_parent_origin_restricted(self):
+        handler = object.__new__(sandbox_app.Handler)
+        headers = []
+
+        with patch.object(handler, "send_header", side_effect=lambda name, value: headers.append((name, value))):
+            with patch.object(BaseHTTPRequestHandler, "end_headers", return_value=None):
+                sandbox_app.Handler.end_headers(handler)
+
+        csp = dict(headers)["Content-Security-Policy"]
+        self.assertIn("sandbox allow-scripts allow-same-origin", csp)
+        self.assertIn("frame-ancestors https://goster.me", csp)
+        self.assertIn("form-action 'none'", csp)
 
     def test_shell_fails_closed_without_signing_key(self):
         item = ResolvedContent(
