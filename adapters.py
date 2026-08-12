@@ -6,7 +6,7 @@ import gzip
 import threading
 import time
 from io import BytesIO
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from gosterme_adapters import (
@@ -18,11 +18,15 @@ from gosterme_adapters import (
     ResolveError,
     UnsupportedURL,
 )
-from gosterme_adapters.html import BasicHTMLParser
+from gosterme_adapters.html import BasicHTMLParser, NativeGameFingerprintParser
 from gosterme_adapters.providers import (
     GenericWordwallPageAdapter as ProviderGenericWordwallPageAdapter,
     WordwallDirectAdapter as ProviderWordwallDirectAdapter,
     YouTubeAdapter as ProviderYouTubeAdapter,
+)
+from gosterme_adapters.sites import (
+    IlkokulAkademiGithubEmbedAdapter as SiteIlkokulAkademiGithubEmbedAdapter,
+    IlkokulAkademiNativeAdapter as SiteIlkokulAkademiNativeAdapter,
 )
 
 USER_AGENT = "Mozilla/5.0 Childsafe/0.2"
@@ -246,30 +250,6 @@ class ExerciseFingerprintParser(BasicHTMLParser):
             self.has_zombify_quiz = True
 
 
-class NativeGameFingerprintParser(BasicHTMLParser):
-    """
-    Collect stable DOM fingerprints for inline educational games.
-    """
-
-    def __init__(self):
-        super().__init__()
-        self.ids: set[str] = set()
-        self.classes: set[str] = set()
-
-    def handle_starttag(self, tag, attrs):
-        super().handle_starttag(tag, attrs)
-
-        attrs = dict(attrs)
-
-        element_id = attrs.get("id")
-
-        if element_id:
-            self.ids.add(element_id)
-
-        for cls in attrs.get("class", "").split():
-            self.classes.add(cls)
-
-
 class YouTubeAdapter(ProviderYouTubeAdapter):
     """Compatibility facade using the runtime-hardened module hooks."""
 
@@ -304,252 +284,33 @@ class GenericWordwallPageAdapter(ProviderGenericWordwallPageAdapter):
         )
 
 
-class IlkokulAkademiGithubEmbedAdapter:
-    name = "ilkokulakademi-github-embed"
+class IlkokulAkademiGithubEmbedAdapter(
+    SiteIlkokulAkademiGithubEmbedAdapter
+):
+    """Compatibility facade using the centralized fetch path."""
 
-    SOURCE_HOSTS = {
-        "ilkokulakademi.com",
-        "www.ilkokulakademi.com",
-    }
-
-    #
-    # Start conservatively with hosts actually observed in the
-    # teacher-link corpus. Expand intentionally as new providers appear.
-    #
-    EMBED_HOSTS = {
-        "omerfarukkus.github.io",
-    }
-
-    def match(self, url: str) -> bool:
-        return hostname(url) in self.SOURCE_HOSTS
-
-    def resolve(
-        self,
-        url: str,
-    ) -> ResolvedContent:
-        url = normalized_url(url)
-
-        if not self.match(url):
-            raise NotApplicable()
-
-        final_url, document = fetch_html(
-            url,
-            allowed_hosts=self.SOURCE_HOSTS,
-        )
-
-        parser = BasicHTMLParser()
-        parser.feed(document)
-
-        for raw_src in parser.iframes:
-            candidate = urljoin(
-                final_url,
-                raw_src,
-            )
-
-            if hostname(candidate) not in self.EMBED_HOSTS:
-                continue
-
-            return ResolvedContent(
-                kind="embed",
-                provider="github-pages",
-                source_url=url,
-                title=parser.title,
-                content_url=candidate,
-                adapter=self.name,
-                render_mode="embed",
-            )
-
-        raise NotApplicable(
-            "No supported GitHub Pages exercise embed found."
+    def __init__(self):
+        super().__init__(
+            normalize_url=lambda url: normalized_url(url),
+            hostname=lambda url: hostname(url),
+            fetch_html=lambda url, allowed_hosts: fetch_html(
+                url,
+                allowed_hosts=allowed_hosts,
+            ),
         )
 
 
-class IlkokulAkademiNativeAdapter:
-    name = "ilkokulakademi-native"
+class IlkokulAkademiNativeAdapter(SiteIlkokulAkademiNativeAdapter):
+    """Compatibility facade using the centralized fetch path."""
 
-    SOURCE_HOSTS = {
-        "ilkokulakademi.com",
-        "www.ilkokulakademi.com",
-    }
-
-    def match(self, url: str) -> bool:
-        return hostname(url) in self.SOURCE_HOSTS
-
-    def resolve(
-        self,
-        url: str,
-    ) -> ResolvedContent:
-        url = normalized_url(url)
-
-        if not self.match(url):
-            raise NotApplicable()
-
-        final_url, document = fetch_html(
-            url,
-            allowed_hosts=self.SOURCE_HOSTS,
-        )
-
-        parser = NativeGameFingerprintParser()
-        parser.feed(document)
-
-        ids = parser.ids
-        classes = parser.classes
-
-        #
-        # Native-game families observed in the real WhatsApp corpus.
-        #
-        # Each family has a conservative fingerprint and an explicit
-        # activity root. The renderer only needs the selector; the
-        # source page keeps its original DOM/JS/CSS intact.
-        #
-
-        selector = None
-
-        game_container_families = (
-            {
-                "game-container",
-                "quiz-box",
-                "question-text",
-                "options-container",
-                "score",
-            },
-            {
-                "game-container",
-                "question-box",
-                "current-question",
-                "score-display",
-                "train-area",
-            },
-            {
-                "game-container",
-                "lives-display",
-                "options-container",
-                "score-display",
-            },
-            {
-                "game-container",
-                "game-screen",
-                "result-screen",
-                "options-container",
-                "score-display",
-            },
-        )
-
-        if any(
-            required.issubset(ids)
-            for required in game_container_families
-        ):
-            selector = "#game-container"
-
-        elif (
-            {
-                "math-game-container",
-                "question-text",
-                "score-display",
-            }.issubset(ids)
-            or
-            {
-                "math-game-container",
-                "question-text",
-                "score-ui",
-                "result-screen",
-            }.issubset(ids)
-        ):
-            selector = "#math-game-container"
-
-        elif {
-            "game-wrapper",
-            "screen-game",
-            "screen-result",
-            "question-text",
-            "options-container",
-            "score",
-        }.issubset(ids):
-            selector = "#game-wrapper"
-
-        elif {
-            "active-game-container",
-            "game-card",
-            "question-text",
-            "options-container",
-            "result-screen",
-            "final-score",
-        }.issubset(ids):
-            selector = "#active-game-container"
-
-        elif {
-            "bilge-quiz-app",
-            "bq-quiz-screen",
-            "bq-question-text",
-            "bq-options-container",
-            "bq-result-screen",
-        }.issubset(ids):
-            selector = "#bilge-quiz-app"
-
-        #
-        # Turkish-named custom game families.
-        #
-
-        if selector is None and {
-            "kurbaga-ana-konteynir",
-            "soru-ekrani",
-            "sonuc-ekrani",
-            "soru-metni",
-            "puan",
-            "canlar",
-        }.issubset(ids):
-            selector = "#kurbaga-ana-konteynir"
-
-        if selector is None and {
-            "sincap-ana-konteynir-root",
-            "sincap-ana-konteynir",
-            "sincap-karakteri",
-            "soru-ekrani",
-            "sonuc-ekrani",
-        }.issubset(ids):
-            selector = "#sincap-ana-konteynir-root"
-
-        if selector is None and (
-            "sincap-etkinlik-alani" in classes
-            and {
-                "aktif-oyun",
-                "oyun-sonu",
-                "mevcut-soru",
-                "oyuncu-sincap",
-                "can-metni",
-                "puan-metni",
-            }.issubset(ids)
-        ):
-            selector = ".sincap-etkinlik-alani"
-
-        if selector is None and {
-            "zipzip-area",
-            "zipzip-score",
-            "zipzip-over",
-            "zv-result-title",
-            "zv-result-score",
-        }.issubset(ids):
-            #
-            # The Zipzip exercise does not expose a generic game-container
-            # id, so isolate the smallest stable parent identified by the
-            # source implementation.
-            #
-            selector = "#zipzip-area"
-
-        if selector is None:
-            raise NotApplicable(
-                "No supported inline native game found."
-            )
-
-        return ResolvedContent(
-            kind="native-exercise",
-            provider="ilkokulakademi-native",
-            source_url=url,
-            title=parser.title,
-            content_url=final_url,
-            adapter=self.name,
-            render_mode="isolate",
-            selector=selector,
+    def __init__(self):
+        super().__init__(
+            normalize_url=lambda url: normalized_url(url),
+            hostname=lambda url: hostname(url),
+            fetch_html=lambda url, allowed_hosts: fetch_html(
+                url,
+                allowed_hosts=allowed_hosts,
+            ),
         )
 
 
