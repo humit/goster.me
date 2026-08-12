@@ -106,11 +106,22 @@ class ProductContactTests(unittest.TestCase):
         same_origin = SimpleNamespace(
             headers={"Origin": product_app.PUBLIC_ORIGIN, "Sec-Fetch-Site": "same-origin"}
         )
+        private_same_origin = SimpleNamespace(
+            headers={"Origin": "null", "Sec-Fetch-Site": "same-origin"}
+        )
         cross_site = SimpleNamespace(
             headers={"Origin": "https://example.com", "Sec-Fetch-Site": "cross-site"}
         )
         self.assertTrue(product_app.same_origin_request(same_origin))
+        self.assertTrue(product_app.same_origin_request(private_same_origin))
         self.assertFalse(product_app.same_origin_request(cross_site))
+
+    def test_feedback_without_fetch_metadata_falls_back_to_origin(self):
+        canonical = SimpleNamespace(headers={"Origin": product_app.PUBLIC_ORIGIN})
+        unknown = SimpleNamespace(headers={"Origin": "null"})
+
+        self.assertTrue(product_app.same_origin_request(canonical))
+        self.assertFalse(product_app.same_origin_request(unknown))
 
 
 if __name__ == "__main__":

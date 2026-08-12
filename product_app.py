@@ -575,7 +575,12 @@ def allow_feedback(client: str) -> bool:
 
 def same_origin_request(handler) -> bool:
     fetch_site = handler.headers.get("Sec-Fetch-Site", "")
-    if fetch_site and fetch_site not in {"same-origin", "none"}:
+    # Modern browsers provide Sec-Fetch-Site as a non-script-writable CSRF
+    # signal. Prefer an explicit same-origin value because privacy settings can
+    # serialize the separate Origin header as the literal value "null".
+    if fetch_site == "same-origin":
+        return True
+    if fetch_site and fetch_site != "none":
         return False
     origin = handler.headers.get("Origin")
     return origin is None or origin.rstrip("/") == PUBLIC_ORIGIN.rstrip("/")
