@@ -265,6 +265,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def end_headers(self) -> None:
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Robots-Tag", "noindex, nofollow, noarchive")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Cross-Origin-Resource-Policy", "same-site")
         # Do not emit X-Frame-Options here: this response must be framed by
@@ -304,11 +305,24 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def send_text(self, status: int, value: str) -> None:
+        body = value.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "public, max-age=3600")
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
 
         if parsed.fragment:
             self.send_error(404)
+            return
+
+        if parsed.path == "/robots.txt" and not parsed.query:
+            self.send_text(200, "User-agent: *\nDisallow: /\n")
             return
 
         parts = [part for part in parsed.path.split("/") if part]
