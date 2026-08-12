@@ -20,7 +20,7 @@ class PlatformSandboxTests(unittest.TestCase):
         with patch.object(platform_app.app, "_ORIGINAL_RESOLVE_URL", return_value=sentinel):
             self.assertIs(platform_app.resolve_with_sandbox("https://example.com"), sentinel)
 
-    def test_shell_uses_signed_dedicated_sandbox_origin(self):
+    def test_shell_uses_signed_dedicated_sandbox_origin_with_storage_compat(self):
         item = ResolvedContent(
             kind="activity",
             provider="example",
@@ -41,8 +41,11 @@ class PlatformSandboxTests(unittest.TestCase):
 
         self.assertIn("https://s.goster.me/v/abc346?exp=", page)
         self.assertIn("&amp;sig=", page)
-        self.assertIn("sandbox=\"allow-scripts allow-modals allow-pointer-lock allow-presentation\"", page)
-        self.assertNotIn("allow-same-origin", page)
+        self.assertIn(
+            "sandbox=\"allow-scripts allow-same-origin allow-modals "
+            "allow-pointer-lock allow-presentation\"",
+            page,
+        )
 
     def test_shell_fails_closed_without_signing_key(self):
         item = ResolvedContent(
