@@ -359,7 +359,7 @@ def render_contact(
         <h1 id="contact-title">Mesaj bırak</h1>
         <p class="contact-lead">
             Karşılaştığınız sorunu veya önerinizi yazabilirsiniz. Mesajınız
-            herkese açık olmaz; yalnızca proje yöneticisi tarafından okunur.
+            herkese açık olmaz.
         </p>
         {error_html}
         <form class="contact-form" method="post" action="/contact">
@@ -384,11 +384,6 @@ def render_contact(
                 <label for="website">Web sitesi</label>
                 <input id="website" name="website" type="text" tabindex="-1" autocomplete="off">
             </div>
-
-            <p class="form-privacy">
-                Lütfen çocuk adı, telefon, e-posta veya başka kişisel bilgi
-                yazmayın. Bu form üzerinden doğrudan yanıt gönderemiyoruz.
-            </p>
             <button type="submit">Mesajı gönder</button>
         </form>
     </section>
