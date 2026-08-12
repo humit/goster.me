@@ -46,6 +46,8 @@ class PlatformSandboxTests(unittest.TestCase):
         self.assertIn(">Paylaş</button>", page)
         self.assertIn(">QR</a>", page)
         self.assertIn('href="/">Ana Sayfa</a>', page)
+        self.assertIn('href="/contact">İletişim</a>', page)
+        self.assertIn("grid-column: 1 / -1", page)
         self.assertIn(">Kaynak</summary>", page)
         self.assertNotIn("← Geri", page)
         self.assertNotIn(">Kopyala</button>", page)
