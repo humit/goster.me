@@ -17,6 +17,8 @@ goster.me {
 
 # Dedicated untrusted-content origin. The backend emits its own CSP with
 # frame-ancestors https://goster.me and CSP sandbox restrictions.
+# Keep the sandbox origin out of access logs because signed capability
+# parameters are bearer credentials until they expire.
 s.goster.me {
     header {
         -Server
@@ -25,5 +27,12 @@ s.goster.me {
     }
 
     encode zstd gzip
-    reverse_proxy 127.0.0.1:8092
+
+    handle /v/* {
+        reverse_proxy 127.0.0.1:8092
+    }
+
+    handle {
+        respond 404
+    }
 }
