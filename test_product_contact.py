@@ -17,6 +17,21 @@ class ProductContactTests(unittest.TestCase):
         self.assertIn('href="/contact">İletişim</a>', page)
         self.assertNotIn("github.com/humit/goster.me/issues", page)
 
+    def test_home_script_owns_url_validation_and_trims_pasted_values(self):
+        script = (product_app.STATIC_DIR / "product.js").read_text()
+
+        self.assertIn('input.type = "text"', script)
+        self.assertIn("form.noValidate = true", script)
+        self.assertIn("input.value = input.value.trim()", script)
+        self.assertIn("const normalized = normalizedHttpUrl(raw)", script)
+        self.assertIn('parsed.protocol !== "http:"', script)
+        self.assertIn('parsed.protocol !== "https:"', script)
+        self.assertIn("Bir bağlantı yapıştırın.", script)
+        self.assertIn(
+            "Geçerli bir web bağlantısı yapıştırın (http:// veya https:// ile başlamalı).",
+            script,
+        )
+
     def test_about_explains_first_party_measurement(self):
         page = product_app.render_about()
         self.assertIn("Ham IP adresi saklanmaz", page)
@@ -85,6 +100,38 @@ class ProductContactTests(unittest.TestCase):
 
             handler.do_POST()
 
+            record.assert_called_once_with(source_url)
+            self.assertEqual(handler.send_html.call_args.args[0], 400)
+
+    def test_whitespace_wrapped_unsupported_url_is_normalized_before_backlog(self):
+        source_url = (
+            "https://ilk-okul.com/1912/hizliokuma/ucan-kelimeler/"
+            "ilkokul/numarali-fikralar.html"
+        )
+        body = urllib.parse.urlencode({"url": f"  {source_url}\n"}).encode()
+        with (
+            patch.object(product_app, "allow_resolve", return_value=True),
+            patch.object(
+                product_app,
+                "hardened_resolve_url",
+                side_effect=product_app.adapters.UnsupportedURL("unsupported"),
+            ) as resolve,
+            patch.object(product_app.UNSUPPORTED, "record") as record,
+            patch.object(product_app.ANALYTICS, "record"),
+        ):
+            handler = product_app.Handler.__new__(product_app.Handler)
+            handler.path = "/resolve"
+            handler.client_address = ("203.0.113.10", 12345)
+            handler.headers = {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Content-Length": str(len(body)),
+            }
+            handler.rfile = io.BytesIO(body)
+            handler.send_html = Mock()
+
+            handler.do_POST()
+
+            resolve.assert_called_once_with(source_url)
             record.assert_called_once_with(source_url)
             self.assertEqual(handler.send_html.call_args.args[0], 400)
 
