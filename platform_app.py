@@ -55,7 +55,7 @@ def render_sandbox_shell(code: str, item) -> str:
         class="fullscreen-frame"
         src="{sandbox_url}"
         title="{app.escape(title)}"
-        sandbox="allow-scripts allow-modals allow-pointer-lock allow-presentation"
+        sandbox="allow-scripts allow-same-origin allow-modals allow-pointer-lock allow-presentation"
         referrerpolicy="no-referrer"
         allow="fullscreen"
         allowfullscreen
