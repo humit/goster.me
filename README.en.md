@@ -194,6 +194,30 @@ python3 -m unittest -v test_shortlinks.py
 For adapter development, validate representative URLs with `test-adapter` and run a
 full corpus regression before milestones.
 
+## Privacy-focused product measurement
+
+goster.me stores no third-party analytics JavaScript, cookies, raw IP addresses,
+User-Agent, referrer or device fingerprint. It records allowlisted product events
+plus provider, adapter, render mode and validated campaign labels. To estimate
+repeated use and filter operator tests, it derives a keyed `visitor_tag` from the
+client IP. The tag rotates daily and is treated as short-lived pseudonymous data,
+not anonymous data. Source URLs are never written to the analytics table.
+
+```bash
+tools/goster analytics --since-hours 24
+tools/goster analytics --since-milestone first-parent-whatsapp-announcement
+tools/goster analytics --since-hours 24 --exclude-current-ssh-client
+```
+
+`--exclude-current-ssh-client` works when the SSH client and browser use the same
+public address. Use `--exclude-ip ADDRESS` for an explicit address. Filtering only
+applies to events collected after visitor tagging is deployed.
+
+Set a dedicated `GOSTER_ANALYTICS_KEY` of at least 32 characters in
+`/etc/goster.me/gosterme.env`. Measurement remains available without the key, but
+new events will not receive a visitor tag. Raw analytics events and tags are removed
+after 30 days by default.
+
 ## Private feedback
 
 The **Contact** link opens a local message form that does not require a GitHub

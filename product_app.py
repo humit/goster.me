@@ -258,6 +258,17 @@ def render_about() -> str:
             </p>
         </section>
 
+        <section>
+            <h2>Mahremiyet</h2>
+            <p>
+                Ürünün çalışıp çalışmadığını anlamak için sayfa ve işlem türleri
+                ölçülür. Çerez, reklam ağı veya üçüncü taraf analytics kullanılmaz.
+                Ham IP adresi saklanmaz; tekrarları yaklaşık sayabilmek için günlük
+                değişen korumalı bir etiket üretilir. Ham ölçüm kayıtları 30 gün
+                sonra silinir.
+            </p>
+        </section>
+
         <p class="info-source">
             <a href="https://github.com/humit/goster.me" rel="noopener noreferrer" target="_blank">
                 Kaynak kodu GitHub'da gör ↗
@@ -632,15 +643,17 @@ class Handler(legacy.Handler):
             campaign = None
             if set(query).issubset({"from"}) and len(query.get("from", [])) <= 1:
                 campaign = clean_campaign((query.get("from") or [None])[0])
-            ANALYTICS.record("landing_view", campaign=campaign)
+            ANALYTICS.record("landing_view", campaign=campaign, visitor_ip=client_ip(self))
             self.send_html(200, render_home(campaign))
             return
 
         if path == "/about":
+            ANALYTICS.record("about_view", visitor_ip=client_ip(self))
             self.send_html(200, render_about())
             return
 
         if path == "/contact" and not parsed.query:
+            ANALYTICS.record("contact_view", visitor_ip=client_ip(self))
             self.send_html(200, render_contact())
             return
 
@@ -666,6 +679,13 @@ class Handler(legacy.Handler):
                     self.send_html(410, render_expired(code))
                     return
 
+                ANALYTICS.record(
+                    "share_page_view",
+                    provider=item.provider,
+                    adapter=item.adapter,
+                    render_mode=item.render_mode,
+                    visitor_ip=client_ip(self),
+                )
                 self.send_html(
                     200,
                     render_share_page(
@@ -735,6 +755,7 @@ class Handler(legacy.Handler):
                     provider=item.provider,
                     adapter=item.adapter,
                     render_mode=item.render_mode,
+                    visitor_ip=client_ip(self),
                 )
                 self.send_html(
                     200,
@@ -823,12 +844,17 @@ class Handler(legacy.Handler):
                 raise ValueError("Unexpected form fields.")
 
             url = validate_public_url(data["url"][0].strip())
-            ANALYTICS.record("resolve_attempt", campaign=campaign)
+            ANALYTICS.record(
+                "resolve_attempt", campaign=campaign, visitor_ip=client_ip(self)
+            )
             item = hardened_resolve_url(url)
             item_id = save_item(item)
 
         except (ValueError, SecurityValidationError, adapters.AdapterError):
-            ANALYTICS.record("resolve_failure", campaign=campaign, outcome="unsupported")
+            ANALYTICS.record(
+                "resolve_failure", campaign=campaign, outcome="unsupported",
+                visitor_ip=client_ip(self),
+            )
             self.send_html(
                 400,
                 render_security_error(
@@ -839,7 +865,10 @@ class Handler(legacy.Handler):
             return
 
         except Exception as exc:
-            ANALYTICS.record("resolve_failure", campaign=campaign, outcome="internal")
+            ANALYTICS.record(
+                "resolve_failure", campaign=campaign, outcome="internal",
+                visitor_ip=client_ip(self),
+            )
             request_id = f"{int(time.time()):x}-{threading.get_ident():x}"
             self.log_error(
                 "resolve failed request_id=%s error=%r",
@@ -861,6 +890,7 @@ class Handler(legacy.Handler):
             provider=item.provider,
             adapter=item.adapter,
             render_mode=item.render_mode,
+            visitor_ip=client_ip(self),
         )
         self.redirect(f"/{item_id}")
 
@@ -941,7 +971,7 @@ class Handler(legacy.Handler):
             )
             return
 
-        ANALYTICS.record("feedback_submitted")
+        ANALYTICS.record("feedback_submitted", visitor_ip=client_ip(self))
         # Post/Redirect/Get prevents a browser refresh from duplicating a message.
         self.redirect("/contact/thanks")
 
@@ -972,6 +1002,7 @@ class Handler(legacy.Handler):
                 provider=item.provider,
                 adapter=item.adapter,
                 render_mode=item.render_mode,
+                visitor_ip=client_ip(self),
             )
         except (UnicodeError, ValueError, json.JSONDecodeError):
             self.send_error(400)

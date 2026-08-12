@@ -20,8 +20,14 @@ class GosterToolTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tempdir:
             database = Path(tempdir) / "goster.sqlite3"
-            store = AnalyticsStore(database)
-            store.record("landing_view", now=int(time.time()))
+            key = "analytics-test-key-0123456789abcdef"
+            store = AnalyticsStore(database, key=key)
+            store.record(
+                "landing_view", now=int(time.time()), visitor_ip="203.0.113.10"
+            )
+            store.record(
+                "landing_view", now=int(time.time()), visitor_ip="198.51.100.20"
+            )
 
             env = os.environ.copy()
             env.update(
@@ -30,10 +36,18 @@ class GosterToolTests(unittest.TestCase):
                     "GOSTER_APP_USER": os.environ.get("USER", "root"),
                     "GOSTER_DATABASE": str(database),
                     "GOSTER_PYTHON": sys.executable,
+                    "GOSTER_ANALYTICS_KEY": key,
+                    "SSH_CONNECTION": "203.0.113.10 54321 192.0.2.10 22",
                 }
             )
             result = subprocess.run(
-                [str(repo_root / "tools/goster"), "analytics", "--since-hours", "1"],
+                [
+                    str(repo_root / "tools/goster"),
+                    "analytics",
+                    "--since-hours",
+                    "1",
+                    "--exclude-current-ssh-client",
+                ],
                 cwd=repo_root,
                 env=env,
                 check=True,
@@ -42,6 +56,7 @@ class GosterToolTests(unittest.TestCase):
             )
 
         self.assertIn("goster.me analytics since_hours=1 campaign=all", result.stdout)
+        self.assertIn("excluded_events=1", result.stdout)
         self.assertIn("landing_view", result.stdout)
         self.assertRegex(result.stdout, r"landing_view\s+1")
 

@@ -196,9 +196,13 @@ Adapter geliştirmede temsilî URL'leri önce `test-adapter` ile kontrol edin; m
 
 ## Mahremiyet odaklı ürün ölçümü
 
-goster.me, üçüncü taraf analytics JavaScript'i, cookie, IP adresi, User-Agent,
-referrer veya cihaz parmak izi saklamaz. Yalnızca ürünün çalışıp çalışmadığını
-anlamak için izinli olay adları ile provider, adapter, render mode ve doğrulanmış kampanya etiketi kaydedilir. Kaynak URL analytics tablosuna yazılmaz.
+goster.me üçüncü taraf analytics JavaScript'i, cookie, ham IP adresi, User-Agent,
+referrer veya cihaz parmak izi saklamaz. Ürünün çalışıp çalışmadığını anlamak için
+izinli olay adları ile provider, adapter, render mode ve doğrulanmış kampanya etiketi
+kaydedilir. Tekrarları yaklaşık saymak ve operatör testlerini filtrelemek için IP
+adresinden anahtarlı, günlük değişen bir `visitor_tag` üretilir. Bu etiket günler
+arasında kullanıcı takibi yapmaz; yine de anonim veri olarak değil, kısa ömürlü
+pseudonymous ölçüm verisi olarak ele alınır. Kaynak URL analytics tablosuna yazılmaz.
 
 Veli grubu duyurusu için kullanılacak kampanya bağlantısı:
 
@@ -209,9 +213,19 @@ https://goster.me/?from=veli-whatsapp-2026-08
 Son 24 saatin raporu:
 
 ```bash
-GOSTER_DATABASE=/var/lib/goster.me/goster.sqlite3 \
-python3 analytics.py --since-hours 24 --campaign veli-whatsapp-2026-08
+tools/goster analytics --since-hours 24
+tools/goster analytics --since-milestone first-parent-whatsapp-announcement
+tools/goster analytics --since-hours 24 --exclude-current-ssh-client
 ```
+
+`--exclude-current-ssh-client`, SSH istemci adresi ile web erişim adresi aynıysa
+operatör olaylarını rapordan çıkarır. VPN, mobil bağlantı veya değişen IP durumunda
+`--exclude-ip ADDRESS` açıkça verilebilir. Filtre yalnızca visitor tag özelliği
+deploy edildikten sonra kaydedilen olaylara uygulanabilir.
+
+Visitor tag üretimi için `/etc/goster.me/gosterme.env` içinde en az 32 karakterlik,
+ayrı bir `GOSTER_ANALYTICS_KEY` bulunmalıdır. Anahtar yoksa ölçüm çalışmaya devam
+eder fakat olaylar visitor tag olmadan kaydedilir.
 
 Ham analytics olayları varsayılan olarak 30 gün tutulur ve mevcut
 `gosterme-storage-maintenance.timer` tarafından temizlenir. Süre
