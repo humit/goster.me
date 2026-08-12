@@ -29,6 +29,10 @@ EVENTS = frozenset({
 MILESTONES = {
     "first-parent-whatsapp-announcement": 1786534260,
 }
+MILESTONE_AUDIENCE_SIZES = {
+    # Parent WhatsApp group membership at announcement time, including the sender.
+    "first-parent-whatsapp-announcement": 49,
+}
 
 
 def clean_campaign(value: str | None) -> str | None:
@@ -132,6 +136,8 @@ def main() -> None:
     store = AnalyticsStore()
     window = f"milestone={milestone}" if milestone else f"since_hours={since_hours}"
     print(f"goster.me analytics {window} campaign={clean_campaign(args.campaign) or 'all'}")
+    if milestone:
+        print(f"audience_size={MILESTONE_AUDIENCE_SIZES.get(milestone, 'unknown')}")
     for event, count in store.summary(since=since, campaign=args.campaign):
         print(f"{event:20} {count}")
 
