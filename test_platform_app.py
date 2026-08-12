@@ -37,8 +37,11 @@ class PlatformSandboxTests(unittest.TestCase):
         with patch.object(platform_app.app.STORE, "get", return_value=item):
             page = platform_app.compact_preview_actions("abc346")
 
-        self.assertIn("goster.me", page)
-        self.assertIn("•••", page)
+        self.assertIn('class="viewer-compact-brand">goster.me</span>', page)
+        self.assertIn('class="viewer-compact-dots" aria-hidden="true">•••</span>', page)
+        self.assertIn("bottom: max(4.75rem", page)
+        self.assertNotIn("top: 48%", page)
+        self.assertIn("viewer-compact-menu[open]::before", page)
         self.assertIn(">Paylaş</button>", page)
         self.assertIn(">QR</a>", page)
         self.assertNotIn("← Geri", page)
