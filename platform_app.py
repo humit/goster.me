@@ -88,8 +88,7 @@ class Handler(app.Handler):
                         provider=item.provider,
                         adapter=item.adapter,
                         render_mode=item.render_mode,
-                        code=code,
-                    )
+                        )
                     self.send_html(200, render_sandbox_shell(code, item))
                     return
 
