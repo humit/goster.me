@@ -274,7 +274,11 @@ class Handler(app.Handler):
             if code is None:
                 self.send_error(404)
                 return
-            app.ANALYTICS.record("contact_view", visitor_ip=app.client_ip(self))
+            if not self.is_head_request():
+                app.ANALYTICS.record(
+                    "contact_view",
+                    visitor_ip=app.client_ip(self),
+                )
             self.send_html(200, render_contact_from_viewer(code))
             return
 
@@ -285,14 +289,15 @@ class Handler(app.Handler):
                 item = app.STORE.get(code, touch=False)
 
                 if item is not None and item.render_mode == "isolate":
-                    # Count only content that is actually served by the shell.
-                    item = app.STORE.get(code)
-                    app.ANALYTICS.record(
-                        "viewer_open",
-                        provider=item.provider,
-                        adapter=item.adapter,
-                        render_mode=item.render_mode,
-                    )
+                    if not self.is_head_request():
+                        # Count only content that is actually served by the shell.
+                        item = app.STORE.get(code)
+                        app.ANALYTICS.record(
+                            "viewer_open",
+                            provider=item.provider,
+                            adapter=item.adapter,
+                            render_mode=item.render_mode,
+                        )
                     self.send_html(200, render_sandbox_shell(code, item))
                     return
 

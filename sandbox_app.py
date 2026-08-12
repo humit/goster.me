@@ -263,6 +263,9 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "goster-sandbox"
     sys_version = ""
 
+    def is_head_request(self) -> bool:
+        return getattr(self, "command", "GET") == "HEAD"
+
     def end_headers(self) -> None:
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Robots-Tag", "noindex, nofollow, noarchive")
@@ -303,7 +306,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(body)
+        if not self.is_head_request():
+            self.wfile.write(body)
 
     def send_text(self, status: int, value: str) -> None:
         body = value.encode("utf-8")
@@ -312,7 +316,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "public, max-age=3600")
         self.end_headers()
-        self.wfile.write(body)
+        if not self.is_head_request():
+            self.wfile.write(body)
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
@@ -362,6 +367,9 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         self.send_html(200, page)
+
+    def do_HEAD(self) -> None:
+        self.do_GET()
 
     def do_POST(self) -> None:
         self.send_error(405)

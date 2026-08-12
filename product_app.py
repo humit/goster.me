@@ -716,6 +716,9 @@ def same_origin_request(handler) -> bool:
 class Handler(legacy.Handler):
     server_version = "GosterMe/0.4"
 
+    def is_head_request(self) -> bool:
+        return getattr(self, "command", "GET") == "HEAD"
+
     def end_headers(self) -> None:
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
@@ -742,7 +745,15 @@ class Handler(legacy.Handler):
         self.send_header("Content-Length", str(len(value)))
         self.send_header("Cache-Control", cache_control)
         self.end_headers()
-        self.wfile.write(value)
+        if not self.is_head_request():
+            self.wfile.write(value)
+
+    def send_html(self, status: int, value: str) -> None:
+        self.send_bytes(
+            status,
+            value.encode("utf-8"),
+            "text/html; charset=utf-8",
+        )
 
     def send_static(self, name: str) -> bool:
         allowed = {
@@ -807,17 +818,24 @@ class Handler(legacy.Handler):
             campaign = None
             if set(query).issubset({"from"}) and len(query.get("from", [])) <= 1:
                 campaign = clean_campaign((query.get("from") or [None])[0])
-            ANALYTICS.record("landing_view", campaign=campaign, visitor_ip=client_ip(self))
+            if not self.is_head_request():
+                ANALYTICS.record(
+                    "landing_view",
+                    campaign=campaign,
+                    visitor_ip=client_ip(self),
+                )
             self.send_html(200, render_home(campaign))
             return
 
         if path == "/about":
-            ANALYTICS.record("about_view", visitor_ip=client_ip(self))
+            if not self.is_head_request():
+                ANALYTICS.record("about_view", visitor_ip=client_ip(self))
             self.send_html(200, render_about())
             return
 
         if path == "/contact" and not parsed.query:
-            ANALYTICS.record("contact_view", visitor_ip=client_ip(self))
+            if not self.is_head_request():
+                ANALYTICS.record("contact_view", visitor_ip=client_ip(self))
             self.send_html(200, render_contact())
             return
 
@@ -843,13 +861,14 @@ class Handler(legacy.Handler):
                     self.send_html(410, render_expired(code))
                     return
 
-                ANALYTICS.record(
-                    "share_page_view",
-                    provider=item.provider,
-                    adapter=item.adapter,
-                    render_mode=item.render_mode,
-                    visitor_ip=client_ip(self),
-                )
+                if not self.is_head_request():
+                    ANALYTICS.record(
+                        "share_page_view",
+                        provider=item.provider,
+                        adapter=item.adapter,
+                        render_mode=item.render_mode,
+                        visitor_ip=client_ip(self),
+                    )
                 self.send_html(
                     200,
                     render_share_page(
@@ -911,16 +930,16 @@ class Handler(legacy.Handler):
                     )
                     return
 
-                # Count only content that is actually served.
-                item = STORE.get(code)
-
-                ANALYTICS.record(
-                    "viewer_open",
-                    provider=item.provider,
-                    adapter=item.adapter,
-                    render_mode=item.render_mode,
-                    visitor_ip=client_ip(self),
-                )
+                if not self.is_head_request():
+                    # Count only content that is actually served.
+                    item = STORE.get(code)
+                    ANALYTICS.record(
+                        "viewer_open",
+                        provider=item.provider,
+                        adapter=item.adapter,
+                        render_mode=item.render_mode,
+                        visitor_ip=client_ip(self),
+                    )
                 self.send_html(
                     200,
                     legacy.render_child(code, item),
@@ -937,6 +956,9 @@ class Handler(legacy.Handler):
                 return
 
         super().do_GET()
+
+    def do_HEAD(self) -> None:
+        self.do_GET()
 
     def do_POST(self):
         parsed = urlparse(self.path)

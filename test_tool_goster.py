@@ -15,6 +15,19 @@ from analytics import AnalyticsStore
 
 
 class GosterToolTests(unittest.TestCase):
+    def test_prod_status_uses_bounded_http_readiness_checks(self):
+        tool = (Path(__file__).resolve().parent / "tools/goster").read_text()
+
+        self.assertIn("wait_for_http_status()", tool)
+        self.assertIn("--connect-timeout 2", tool)
+        self.assertIn("--max-time 5", tool)
+        self.assertIn("wait_for_http_status https://goster.me/ 200", tool)
+        self.assertIn(
+            "wait_for_http_status https://s.goster.me/v/invalid 404",
+            tool,
+        )
+        self.assertIn("production HTTP readiness checks failed", tool)
+
     def test_analytics_command_runs_report_with_forwarded_arguments(self):
         repo_root = Path(__file__).resolve().parent
 
