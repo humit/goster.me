@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import product_app
 
@@ -13,6 +14,49 @@ class ProductContactTests(unittest.TestCase):
         page = product_app.render_home()
         self.assertIn('href="/contact">İletişim</a>', page)
         self.assertNotIn("github.com/humit/goster.me/issues", page)
+
+    def test_about_explains_first_party_measurement(self):
+        page = product_app.render_about()
+        self.assertIn("Ham IP adresi saklanmaz", page)
+        self.assertIn("30 gün", page)
+
+    def test_information_page_views_are_recorded_with_client_ip(self):
+        for path, event in (("/about", "about_view"), ("/contact", "contact_view")):
+            with self.subTest(path=path), patch.object(product_app.ANALYTICS, "record") as record:
+                handler = product_app.Handler.__new__(product_app.Handler)
+                handler.path = path
+                handler.client_address = ("203.0.113.10", 12345)
+                handler.headers = {}
+                handler.send_html = Mock()
+
+                handler.do_GET()
+
+                record.assert_called_once_with(event, visitor_ip="203.0.113.10")
+                handler.send_html.assert_called_once()
+
+    def test_share_page_view_is_recorded_without_short_code(self):
+        item = SimpleNamespace(
+            provider="youtube", adapter="youtube", render_mode="youtube-embed"
+        )
+        with (
+            patch.object(product_app.STORE, "get", return_value=item),
+            patch.object(product_app.ANALYTICS, "record") as record,
+        ):
+            handler = product_app.Handler.__new__(product_app.Handler)
+            handler.path = "/q/abc346"
+            handler.client_address = ("203.0.113.10", 12345)
+            handler.headers = {}
+            handler.send_html = Mock()
+
+            handler.do_GET()
+
+            record.assert_called_once_with(
+                "share_page_view",
+                provider="youtube",
+                adapter="youtube",
+                render_mode="youtube-embed",
+                visitor_ip="203.0.113.10",
+            )
 
     def test_contact_form_is_minimal_and_escapes_replayed_input(self):
         page = product_app.render_contact(
