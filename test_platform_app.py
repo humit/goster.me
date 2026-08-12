@@ -22,6 +22,27 @@ class PlatformSandboxTests(unittest.TestCase):
         with patch.object(platform_app.app, "_ORIGINAL_RESOLVE_URL", return_value=sentinel):
             self.assertIs(platform_app.resolve_with_sandbox("https://example.com"), sentinel)
 
+    def test_compact_viewer_menu_discloses_source_without_source_navigation(self):
+        item = ResolvedContent(
+            kind="activity",
+            provider="example",
+            source_url="https://example.com/source/path?x=1",
+            title="Example",
+            content_url="https://example.com/activity",
+            adapter="example",
+            render_mode="isolate",
+            selector="#game",
+        )
+
+        with patch.object(platform_app.app.STORE, "get", return_value=item):
+            page = platform_app.compact_preview_actions("abc346")
+
+        self.assertIn("•••", page)
+        self.assertIn("Kaynak: example.com", page)
+        self.assertIn("https://example.com/source/path?x=1", page)
+        self.assertIn("URL'yi kopyala", page)
+        self.assertNotIn('href="https://example.com/source/path?x=1"', page)
+
     def test_shell_uses_signed_dedicated_sandbox_origin_with_storage_compat(self):
         item = ResolvedContent(
             kind="activity",
@@ -39,7 +60,8 @@ class PlatformSandboxTests(unittest.TestCase):
             {"GOSTER_SANDBOX_SIGNING_KEY": TEST_KEY},
             clear=False,
         ):
-            page = platform_app.render_sandbox_shell("abc346", item)
+            with patch.object(platform_app.app.STORE, "get", return_value=item):
+                page = platform_app.render_sandbox_shell("abc346", item)
 
         self.assertIn("https://s.goster.me/v/abc346?exp=", page)
         self.assertIn("&amp;sig=", page)
@@ -48,6 +70,7 @@ class PlatformSandboxTests(unittest.TestCase):
             "allow-pointer-lock allow-presentation\"",
             page,
         )
+        self.assertIn("viewer-compact-menu", page)
 
     def test_sandbox_csp_allows_storage_but_keeps_parent_origin_restricted(self):
         handler = object.__new__(sandbox_app.Handler)
