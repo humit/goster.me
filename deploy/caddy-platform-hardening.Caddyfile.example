@@ -1,6 +1,12 @@
 # Merge these directives into the existing production Caddyfile; do not
 # replace the current scanner-path deny rules or access logging blindly.
 
+# Canonicalize the public www hostname. Declaring www.goster.me here also
+# lets Caddy manage its HTTPS certificate automatically.
+www.goster.me {
+    redir https://goster.me{uri} permanent
+}
+
 # Main public origin additions.
 goster.me {
     header {
