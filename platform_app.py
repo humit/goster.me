@@ -58,7 +58,16 @@ def compact_preview_actions(
     z-index: 2147483646;
     font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }}
+.viewer-compact-menu[open]::before {{
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    background: transparent;
+}}
 .viewer-compact-menu > summary {{
+    position: relative;
+    z-index: 2;
     width: 4.5rem;
     min-height: 3rem;
     display: flex;
@@ -98,6 +107,7 @@ def compact_preview_actions(
 }}
 .viewer-compact-panel {{
     position: absolute;
+    z-index: 2;
     right: 0;
     bottom: calc(100% + .5rem);
     width: min(19rem, calc(100vw - 1.4rem));
