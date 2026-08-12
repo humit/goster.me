@@ -203,7 +203,7 @@ class Handler(BaseHTTPRequestHandler):
                     "form-action 'none'",
                     "base-uri https:",
                     f"frame-ancestors {MAIN_ORIGIN}",
-                    "sandbox allow-scripts allow-modals allow-pointer-lock allow-presentation",
+                    "sandbox allow-scripts allow-same-origin allow-modals allow-pointer-lock allow-presentation",
                 )
             ),
         )

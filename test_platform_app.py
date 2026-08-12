@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import unittest
+from http.server import BaseHTTPRequestHandler
 from unittest.mock import patch
 
 import platform_app
+import sandbox_app
 
 from adapters import ResolvedContent
 
@@ -20,7 +22,7 @@ class PlatformSandboxTests(unittest.TestCase):
         with patch.object(platform_app.app, "_ORIGINAL_RESOLVE_URL", return_value=sentinel):
             self.assertIs(platform_app.resolve_with_sandbox("https://example.com"), sentinel)
 
-    def test_shell_uses_signed_dedicated_sandbox_origin(self):
+    def test_shell_uses_signed_dedicated_sandbox_origin_with_storage_compat(self):
         item = ResolvedContent(
             kind="activity",
             provider="example",
@@ -41,8 +43,24 @@ class PlatformSandboxTests(unittest.TestCase):
 
         self.assertIn("https://s.goster.me/v/abc346?exp=", page)
         self.assertIn("&amp;sig=", page)
-        self.assertIn("sandbox=\"allow-scripts allow-modals allow-pointer-lock allow-presentation\"", page)
-        self.assertNotIn("allow-same-origin", page)
+        self.assertIn(
+            "sandbox=\"allow-scripts allow-same-origin allow-modals "
+            "allow-pointer-lock allow-presentation\"",
+            page,
+        )
+
+    def test_sandbox_csp_allows_storage_but_keeps_parent_origin_restricted(self):
+        handler = object.__new__(sandbox_app.Handler)
+        headers = []
+
+        with patch.object(handler, "send_header", side_effect=lambda name, value: headers.append((name, value))):
+            with patch.object(BaseHTTPRequestHandler, "end_headers", return_value=None):
+                sandbox_app.Handler.end_headers(handler)
+
+        csp = dict(headers)["Content-Security-Policy"]
+        self.assertIn("sandbox allow-scripts allow-same-origin", csp)
+        self.assertIn("frame-ancestors https://goster.me", csp)
+        self.assertIn("form-action 'none'", csp)
 
     def test_shell_fails_closed_without_signing_key(self):
         item = ResolvedContent(
