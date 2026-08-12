@@ -146,8 +146,8 @@ def compact_preview_actions(
 .viewer-source {{
     min-width: 0;
     margin: 0;
+    grid-column: 1 / -1;
 }}
-.viewer-source[open] {{ grid-column: 1 / -1; }}
 .viewer-source-summary {{
     width: 100%;
     justify-content: center;
@@ -184,6 +184,7 @@ def compact_preview_actions(
             <button class="viewer-compact-action" type="button" data-action="share" data-url="{canonical}">Paylaş</button>
             <a class="viewer-compact-action" href="/q/{app.escape(item_id)}" data-action="qr">QR</a>
             <a class="viewer-compact-action" href="/">Ana Sayfa</a>
+            <a class="viewer-compact-action" href="/contact">İletişim</a>
             <details class="viewer-source">
                 <summary class="viewer-source-summary">Kaynak</summary>
                 <div class="viewer-source-body">
