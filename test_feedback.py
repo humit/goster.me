@@ -55,6 +55,13 @@ class FeedbackStoreTests(unittest.TestCase):
         self.assertEqual(reviewed[0]["reviewed_at"], 200)
         self.assertFalse(self.store.mark_reviewed("not-a-receipt"))
 
+    def test_lists_and_marks_pending_telegram_notifications(self):
+        receipt = self.store.submit("problem", "Bir şey çalışmadı.", now=100)
+        self.assertEqual(self.store.pending_notifications()[0]["id"], receipt)
+        self.assertTrue(self.store.mark_notified(receipt, now=200))
+        self.assertEqual(self.store.pending_notifications(), [])
+        self.assertFalse(self.store.mark_notified(receipt, now=300))
+
     def test_enforces_row_quota(self):
         for timestamp in range(10):
             self.store.submit("other", f"Mesaj {timestamp}", now=timestamp)

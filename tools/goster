@@ -233,7 +233,30 @@ cmd_prod_status() {
 cmd_feedback() {
     require_repo
     require_path "$PYTHON"
+    if [ "${1:-}" = "notify" ]; then
+        shift
+        run_app env \
+            GOSTER_TELEGRAM_BOT_TOKEN="$(read_env_value GOSTER_TELEGRAM_BOT_TOKEN)" \
+            GOSTER_TELEGRAM_CHAT_ID="$(read_env_value GOSTER_TELEGRAM_CHAT_ID)" \
+            "$PYTHON" "$APP_ROOT/feedback_telegram.py" "$@"
+        return
+    fi
     run_app "$PYTHON" "$APP_ROOT/feedback.py" "$@"
+}
+
+read_env_value() {
+    local name="$1"
+    if [ "$(id -un)" = "$APP_USER" ]; then
+        awk -F= -v name="$name" '$1==name {print substr($0, index($0,"=")+1); exit}' "$ENV_FILE"
+    else
+        sudo awk -F= -v name="$name" '$1==name {print substr($0, index($0,"=")+1); exit}' "$ENV_FILE"
+    fi
+}
+
+cmd_unsupported() {
+    require_repo
+    require_path "$PYTHON"
+    run_app "$PYTHON" "$APP_ROOT/unsupported.py" "$@"
 }
 
 cmd_analytics() {
@@ -284,6 +307,9 @@ Usage:
   tools/goster feedback list [--status unread|reviewed|all] [--limit N]
   tools/goster feedback ack <receipt>
   tools/goster feedback purge
+  tools/goster feedback notify
+  tools/goster unsupported list [--limit N]
+  tools/goster unsupported purge
 
 This first deployment-workflow increment is intentionally read-mostly for production.
 It prepares and validates exact-SHA staging worktrees and verifies production state.
@@ -317,6 +343,9 @@ main() {
             ;;
         feedback)
             cmd_feedback "$@"
+            ;;
+        unsupported)
+            cmd_unsupported "$@"
             ;;
         -h|--help|help|"")
             usage

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from analytics import RAW_RETENTION_SECONDS
 from feedback import RAW_RETENTION_SECONDS as FEEDBACK_RETENTION_SECONDS
+from unsupported import RAW_RETENTION_SECONDS as UNSUPPORTED_RETENTION_SECONDS
 
 
 DATABASE_PATH = Path(
@@ -86,6 +87,17 @@ def maintain_database(
                 (timestamp - FEEDBACK_RETENTION_SECONDS,),
             ).rowcount
 
+        unsupported_purged = 0
+        unsupported_table = db.execute(
+            "SELECT 1 FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'unsupported_targets'"
+        ).fetchone()
+        if unsupported_table is not None:
+            unsupported_purged = db.execute(
+                "DELETE FROM unsupported_targets WHERE last_seen_at < ?",
+                (timestamp - UNSUPPORTED_RETENTION_SECONDS,),
+            ).rowcount
+
         rows = int(db.execute("SELECT COUNT(*) FROM short_links").fetchone()[0])
         trimmed = 0
 
@@ -115,6 +127,7 @@ def maintain_database(
         "expired": expired,
         "analytics_purged": analytics_purged,
         "feedback_purged": feedback_purged,
+        "unsupported_purged": unsupported_purged,
         "trimmed": trimmed,
         "remaining": remaining,
         "page_size": page_size,

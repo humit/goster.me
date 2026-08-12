@@ -231,6 +231,17 @@ Ham analytics olayları varsayılan olarak 30 gün tutulur ve mevcut
 `gosterme-storage-maintenance.timer` tarafından temizlenir. Süre
 `GOSTER_ANALYTICS_RETENTION_SECONDS` ile değiştirilebilir.
 
+Desteklenmeyen fakat geçerli URL denemeleri ayrı bir adapter backlog’unda tutulur.
+Query string, fragment ve ziyaretçi bilgisi saklanmaz; muhtemel kimlik/token path
+parçaları maskelenir. Aynı host/path hedefi tek satırda sayaç olarak güncellenir:
+
+```bash
+tools/goster unsupported list
+tools/goster unsupported purge
+```
+
+Bu kayıtlar varsayılan olarak son görülmelerinden 30 gün sonra silinir.
+
 ## Özel geri bildirim
 
 Ana sayfadaki **İletişim** bağlantısı, GitHub hesabı gerektirmeyen yerel bir mesaj
@@ -244,7 +255,15 @@ Okunmamış mesajları listelemek ve bir mesajı incelendi olarak işaretlemek i
 ```bash
 tools/goster feedback list
 tools/goster feedback ack <receipt>
+tools/goster feedback notify
 ```
+
+Yeni mesajlar `gosterme-feedback-telegram.timer` ile yaklaşık 30 dakikada bir
+Telegram’a iletilebilir. Başarılı teslim işaretlenmeden mesaj kuyruktan çıkarılmaz;
+başarısız teslim bir sonraki çalıştırmada yeniden denenir. Telegram sınırını aşan
+mesajlar bildirimde kısaltılır, tam metin SQLite ve operator CLI’da kalır. Bot token
+ve hedef chat ID yalnızca `/etc/goster.me/gosterme.env` içindeki
+`GOSTER_TELEGRAM_BOT_TOKEN` ve `GOSTER_TELEGRAM_CHAT_ID` değerlerinden okunur.
 
 Mesajlar varsayılan olarak 90 gün sonra storage maintenance sırasında silinir.
 Form, bellek içi rate limiting, form boyutu sınırı, alan allowlist'i, same-origin

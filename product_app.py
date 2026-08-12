@@ -23,6 +23,7 @@ import public_app as legacy
 
 from analytics import AnalyticsStore, clean_campaign
 from feedback import FeedbackStore, MESSAGE_MAX_LENGTH, normalize_submission
+from unsupported import UnsupportedTargetStore
 
 from security import (
     SecurityValidationError,
@@ -45,6 +46,7 @@ PORT = int(os.environ.get("GOSTER_PORT", str(legacy.PORT)))
 STORE = ShortLinkStore()
 ANALYTICS = AnalyticsStore(STORE.path)
 FEEDBACK = FeedbackStore(STORE.path)
+UNSUPPORTED = UnsupportedTargetStore(STORE.path)
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "static"
 PUBLIC_ORIGIN = public_origin()
@@ -815,6 +817,7 @@ class Handler(legacy.Handler):
             )
             return
 
+        validated_url = None
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
@@ -844,6 +847,7 @@ class Handler(legacy.Handler):
                 raise ValueError("Unexpected form fields.")
 
             url = validate_public_url(data["url"][0].strip())
+            validated_url = url
             ANALYTICS.record(
                 "resolve_attempt", campaign=campaign, visitor_ip=client_ip(self)
             )
@@ -851,6 +855,11 @@ class Handler(legacy.Handler):
             item_id = save_item(item)
 
         except (ValueError, SecurityValidationError, adapters.AdapterError):
+            if validated_url is not None:
+                try:
+                    UNSUPPORTED.record(validated_url)
+                except Exception:
+                    self.log_error("unsupported target recording failed")
             ANALYTICS.record(
                 "resolve_failure", campaign=campaign, outcome="unsupported",
                 visitor_ip=client_ip(self),
