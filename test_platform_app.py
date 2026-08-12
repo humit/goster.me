@@ -46,6 +46,8 @@ class PlatformSandboxTests(unittest.TestCase):
         self.assertIn(">Paylaş</button>", page)
         self.assertIn(">QR</a>", page)
         self.assertIn('href="/">Ana Sayfa</a>', page)
+        self.assertIn('href="/contact?from=abc346">İletişim</a>', page)
+        self.assertIn("grid-column: 1 / -1", page)
         self.assertIn(">Kaynak</summary>", page)
         self.assertNotIn("← Geri", page)
         self.assertNotIn(">Kopyala</button>", page)
@@ -53,6 +55,25 @@ class PlatformSandboxTests(unittest.TestCase):
         self.assertIn("https://example.com/source/path?x=1", page)
         self.assertIn("URL'yi kopyala", page)
         self.assertNotIn('href="https://example.com/source/path?x=1"', page)
+
+    def test_contact_return_code_accepts_only_live_local_short_code(self):
+        item = object()
+        with patch.object(platform_app.app.STORE, "get", return_value=item):
+            self.assertEqual(platform_app.contact_return_code("from=abc346"), "abc346")
+
+        with patch.object(platform_app.app.STORE, "get", return_value=None):
+            self.assertIsNone(platform_app.contact_return_code("from=abc346"))
+
+        self.assertIsNone(platform_app.contact_return_code("from=https%3A%2F%2Fevil.example"))
+        self.assertIsNone(platform_app.contact_return_code("from=abc346&next=evil"))
+        self.assertIsNone(platform_app.contact_return_code("from=../../etc/passwd"))
+
+    def test_contact_from_viewer_rewrites_only_back_link(self):
+        page = platform_app.render_contact_from_viewer("abc346")
+
+        self.assertIn('class="text-link" href="/abc346">← Geri</a>', page)
+        self.assertIn('class="product-wordmark" href="/">goster.me</a>', page)
+        self.assertIn('action="/contact"', page)
 
     def test_shell_uses_signed_dedicated_sandbox_origin_with_storage_compat(self):
         item = ResolvedContent(

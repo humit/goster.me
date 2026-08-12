@@ -6,7 +6,7 @@ import html
 import os
 
 from http.server import ThreadingHTTPServer
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import product_app as app
 import adapter_extensions  # noqa: F401
@@ -146,8 +146,8 @@ def compact_preview_actions(
 .viewer-source {{
     min-width: 0;
     margin: 0;
+    grid-column: 1 / -1;
 }}
-.viewer-source[open] {{ grid-column: 1 / -1; }}
 .viewer-source-summary {{
     width: 100%;
     justify-content: center;
@@ -184,6 +184,7 @@ def compact_preview_actions(
             <button class="viewer-compact-action" type="button" data-action="share" data-url="{canonical}">Paylaş</button>
             <a class="viewer-compact-action" href="/q/{app.escape(item_id)}" data-action="qr">QR</a>
             <a class="viewer-compact-action" href="/">Ana Sayfa</a>
+            <a class="viewer-compact-action" href="/contact?from={app.escape(item_id)}">İletişim</a>
             <details class="viewer-source">
                 <summary class="viewer-source-summary">Kaynak</summary>
                 <div class="viewer-source-body">
@@ -207,6 +208,28 @@ def compact_preview_actions(
 # informational only: no direct navigation back to the third-party page.
 app.branded_preview_actions = compact_preview_actions
 app.legacy.preview_actions = compact_preview_actions
+
+
+def contact_return_code(query: str) -> str | None:
+    """Accept only a live local short code as a contact-page return target."""
+    values = parse_qs(query, keep_blank_values=True)
+    if set(values) != {"from"} or len(values["from"]) != 1:
+        return None
+
+    code = values["from"][0].strip().lower()
+    if not app.SHORT_CODE_RE.fullmatch(code):
+        return None
+    if app.STORE.get(code, touch=False) is None:
+        return None
+    return code
+
+
+def render_contact_from_viewer(code: str) -> str:
+    """Render the native contact page with a safe local return target."""
+    page = app.render_contact()
+    default_back = '<a class="text-link" href="/">← Geri</a>'
+    viewer_back = f'<a class="text-link" href="/{app.escape(code)}">← Geri</a>'
+    return page.replace(default_back, viewer_back, 1)
 
 
 def render_sandbox_shell(code: str, item) -> str:
@@ -246,6 +269,15 @@ class Handler(app.Handler):
         path = parsed.path
         parts = [part for part in path.split("/") if part]
 
+        if path == "/contact" and parsed.query:
+            code = contact_return_code(parsed.query)
+            if code is None:
+                self.send_error(404)
+                return
+            app.ANALYTICS.record("contact_view", visitor_ip=app.client_ip(self))
+            self.send_html(200, render_contact_from_viewer(code))
+            return
+
         if not parsed.query and len(parts) == 1:
             code = parts[0].lower()
 
@@ -260,7 +292,7 @@ class Handler(app.Handler):
                         provider=item.provider,
                         adapter=item.adapter,
                         render_mode=item.render_mode,
-                        )
+                    )
                     self.send_html(200, render_sandbox_shell(code, item))
                     return
 
