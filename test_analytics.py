@@ -23,15 +23,16 @@ class AnalyticsStoreTests(unittest.TestCase):
     def test_stores_only_allowlisted_product_fields(self):
         self.store.record(
             "resolve_success", now=100, campaign="veli-whatsapp-2026-08",
-            provider="youtube", adapter="youtube", render_mode="youtube-embed", code="abc346",
+            provider="youtube", adapter="youtube", render_mode="youtube-embed",
         )
         with sqlite3.connect(self.path) as db:
             columns = [row[1] for row in db.execute("PRAGMA table_info(analytics_events)")]
-            row = db.execute("SELECT event, campaign, provider, code FROM analytics_events").fetchone()
+            row = db.execute("SELECT event, campaign, provider FROM analytics_events").fetchone()
         self.assertNotIn("ip", columns)
         self.assertNotIn("user_agent", columns)
         self.assertNotIn("url", columns)
-        self.assertEqual(row, ("resolve_success", "veli-whatsapp-2026-08", "youtube", "abc346"))
+        self.assertNotIn("code", columns)
+        self.assertEqual(row, ("resolve_success", "veli-whatsapp-2026-08", "youtube"))
 
     def test_rejects_unknown_event(self):
         with self.assertRaises(ValueError):
