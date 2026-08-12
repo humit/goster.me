@@ -101,6 +101,13 @@ adresi, User-Agent veya referrer istemez ve kalıcılaştırmaz. Geri bildirim y
 operatör tarafından görülebilir; row/database limitleri, request/abuse kontrolleri
 ve otomatik retention temizliği ile sınırlandırılır.
 
+Geçerli fakat desteklenmeyen hedefler bounded bir adapter backlog’unda ayrı tutulur.
+Query string ve fragment atılır, kimlik benzeri path parçaları maskelenir, tekrar eden
+host/path hedefleri tek satırda sayılır ve kayıtlar süre sonunda silinir. Bu backlog’a
+visitor tag bağlanmaz. İsteğe bağlı Telegram teslimatı mesajı yalnızca operatörün
+kontrolündeki tek bir chat’e yollar; kimlik bilgileri sadece service environment’ında
+tutulur ve normal tekrarları önlemek için başarılı teslim durumu kaydedilir.
+
 ## Storage ve process kontrolleri
 
 Application storage row, payload ve database-growth limitleriyle sınırlandırılır; expired data için periodic maintenance uygulanır.

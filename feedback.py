@@ -80,10 +80,18 @@ class FeedbackStore:
                     message TEXT NOT NULL,
                     status TEXT NOT NULL DEFAULT 'unread'
                         CHECK(status IN ('unread', 'reviewed')),
-                    reviewed_at INTEGER
+                    reviewed_at INTEGER,
+                    telegram_notified_at INTEGER
                 )
                 """
             )
+            columns = {
+                str(row[1]) for row in db.execute("PRAGMA table_info(feedback_messages)")
+            }
+            if "telegram_notified_at" not in columns:
+                db.execute(
+                    "ALTER TABLE feedback_messages ADD COLUMN telegram_notified_at INTEGER"
+                )
             db.execute(
                 "CREATE INDEX IF NOT EXISTS feedback_created_at_idx "
                 "ON feedback_messages(created_at)"
@@ -192,6 +200,41 @@ class FeedbackStore:
                 UPDATE feedback_messages
                 SET status = 'reviewed', reviewed_at = ?
                 WHERE id = ?
+                """,
+                (timestamp, normalized),
+            ).rowcount
+        return updated == 1
+
+    def pending_notifications(self, *, limit: int = 20) -> list[dict[str, object]]:
+        if limit <= 0 or limit > 100:
+            raise ValueError("limit must be between 1 and 100")
+        with self._connect() as db:
+            db.row_factory = sqlite3.Row
+            return [
+                dict(row)
+                for row in db.execute(
+                    """
+                    SELECT id, created_at, category, message
+                    FROM feedback_messages
+                    WHERE telegram_notified_at IS NULL
+                    ORDER BY created_at ASC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                )
+            ]
+
+    def mark_notified(self, receipt: str, *, now: int | None = None) -> bool:
+        normalized = receipt.strip().lower()
+        if not RECEIPT_RE.fullmatch(normalized):
+            return False
+        timestamp = int(time.time() if now is None else now)
+        with self._connect() as db:
+            updated = db.execute(
+                """
+                UPDATE feedback_messages
+                SET telegram_notified_at = ?
+                WHERE id = ? AND telegram_notified_at IS NULL
                 """,
                 (timestamp, normalized),
             ).rowcount

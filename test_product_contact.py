@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import io
 import unittest
+import urllib.parse
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -57,6 +59,34 @@ class ProductContactTests(unittest.TestCase):
                 render_mode="youtube-embed",
                 visitor_ip="203.0.113.10",
             )
+
+    def test_valid_unsupported_url_is_added_to_adapter_backlog(self):
+        source_url = "https://example.com/activity/lesson?token=secret"
+        body = urllib.parse.urlencode({"url": source_url}).encode()
+        with (
+            patch.object(product_app, "allow_resolve", return_value=True),
+            patch.object(
+                product_app,
+                "hardened_resolve_url",
+                side_effect=product_app.adapters.UnsupportedURL("unsupported"),
+            ),
+            patch.object(product_app.UNSUPPORTED, "record") as record,
+            patch.object(product_app.ANALYTICS, "record"),
+        ):
+            handler = product_app.Handler.__new__(product_app.Handler)
+            handler.path = "/resolve"
+            handler.client_address = ("203.0.113.10", 12345)
+            handler.headers = {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Content-Length": str(len(body)),
+            }
+            handler.rfile = io.BytesIO(body)
+            handler.send_html = Mock()
+
+            handler.do_POST()
+
+            record.assert_called_once_with(source_url)
+            self.assertEqual(handler.send_html.call_args.args[0], 400)
 
     def test_contact_form_is_minimal_and_escapes_replayed_input(self):
         page = product_app.render_contact(

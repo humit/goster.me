@@ -11,6 +11,7 @@ from adapters import ResolvedContent
 from shortlinks import ShortLinkStore
 from feedback import FeedbackStore
 from storage_maintenance import maintain_database
+from unsupported import UnsupportedTargetStore
 
 
 class StorageMaintenanceTests(unittest.TestCase):
@@ -71,6 +72,18 @@ class StorageMaintenanceTests(unittest.TestCase):
         )
 
         self.assertEqual(stats["feedback_purged"], 1)
+
+    def test_purges_stale_unsupported_targets(self):
+        unsupported = UnsupportedTargetStore(self.path)
+        unsupported.record("https://example.com/old", now=100)
+        stats = maintain_database(
+            self.path,
+            now=100 + 31 * 24 * 60 * 60,
+            max_rows=10,
+            target_rows=8,
+            max_bytes=8 * 1024 * 1024,
+        )
+        self.assertEqual(stats["unsupported_purged"], 1)
 
     def test_trims_oldest_rows_to_target(self):
         for timestamp in range(100, 106):

@@ -218,6 +218,11 @@ Set a dedicated `GOSTER_ANALYTICS_KEY` of at least 32 characters in
 new events will not receive a visitor tag. Raw analytics events and tags are removed
 after 30 days by default.
 
+Valid but unsupported URL attempts are kept as a deduplicated adapter backlog.
+Query strings, fragments and visitor data are discarded, and likely identifier or
+token path segments are redacted. Use `tools/goster unsupported list`; targets expire
+30 days after their last observation by default.
+
 ## Private feedback
 
 The **Contact** link opens a local message form that does not require a GitHub
@@ -229,7 +234,15 @@ include children's names or other personal information.
 ```bash
 tools/goster feedback list
 tools/goster feedback ack <receipt>
+tools/goster feedback notify
 ```
+
+The optional `gosterme-feedback-telegram.timer` delivers pending messages roughly
+every 30 minutes. A message is marked delivered only after Telegram confirms it;
+failed deliveries remain pending. Oversized notifications are truncated while the
+complete text remains available through the operator CLI. Credentials are read only
+from `GOSTER_TELEGRAM_BOT_TOKEN` and `GOSTER_TELEGRAM_CHAT_ID` in the service
+environment file.
 
 Messages are removed after 90 days by default. In-memory rate limiting, bounded form
 and message sizes, field allowlisting, same-origin checks and a honeypot field limit

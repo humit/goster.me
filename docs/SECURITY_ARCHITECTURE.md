@@ -85,6 +85,14 @@ IP address, User-Agent or referrer. Feedback is private to the operator, bounded
 row and database limits, protected by request and abuse controls, and automatically
 removed after the configured retention window.
 
+Valid but unsupported targets are stored separately as a bounded adapter backlog.
+Query strings and fragments are discarded, likely identifier-like path segments are
+redacted, repeated host/path targets are counted in one row, and records expire. No
+visitor tag is attached to this backlog. Optional Telegram feedback delivery sends
+the submitted message to one operator-controlled chat using credentials held only in
+the service environment; successful delivery state is persisted to prevent routine
+duplicates.
+
 ## Storage and process controls
 
 Application storage is bounded using row, payload and database-growth controls, with periodic maintenance of expired data.
