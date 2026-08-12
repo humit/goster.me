@@ -183,6 +183,9 @@ Yeni provider'lar gerçek kullanımda görülen URL'lere göre eklenir.
 `analyze-corpus`
 : WhatsApp/chat URL corpus'unu bütün adapter'larla analiz eder.
 
+`docs/CAPACITY_SCALABILITY_RESILIENCE.md`
+: Sunucu darboğazları, SPoF'lar ve dikey/yatay ölçekleme sözleşmesi.
+
 ## Test
 
 Short-link davranışı yalnızca Python standard library kullanılarak test edilebilir:
