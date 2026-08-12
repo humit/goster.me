@@ -190,6 +190,18 @@ When collaborating with the maintainer:
 - never ask for information that can be safely obtained from the repository or connected tooling;
 - if uncertain about a production-affecting fact, inspect it rather than guessing.
 
+For meaningful engineering increments, make the reasoning explicit at the appropriate level:
+
+- **Why** — the problem, risk, or opportunity being addressed;
+- **What** — the concrete scope and intended outcome;
+- **How** — the implementation or operational mechanism;
+- **Risk / blast radius** — what could regress and which invariants are involved;
+- **Validation** — observable acceptance criteria;
+- **Rollback** — the safe recovery path when relevant;
+- **Next** — the smallest useful next increment.
+
+Use low-level detail when it affects correctness and high-level architecture when it affects system direction. Do not add explanation merely for ceremony.
+
 ## 12. AI provenance
 
 AI-assisted development is intentional and should be visible rather than disguised.
@@ -230,3 +242,46 @@ Depending on scope, completion requires:
 - production verification is complete when deployed;
 - documentation is updated if the engineering contract changed;
 - known residual issues are recorded rather than hidden.
+
+## 15. Lightweight Scrum / SAFe-style tracking
+
+Use GitHub Issues when tracking creates engineering value; do not create tickets merely to imitate process.
+
+An issue is normally worthwhile when work has one or more of these properties:
+
+- spans multiple coherent increments or commits;
+- carries meaningful production/security/operational risk;
+- needs explicit acceptance criteria or Definition of Done;
+- contains architectural decisions or non-goals worth preserving;
+- is likely to continue across sessions or contributors;
+- has dependencies, follow-up work, or residual issues that could otherwise be lost;
+- represents an epic/capability whose progress should remain visible independently of a single PR.
+
+Small self-contained fixes may remain entirely within a PR when an issue would add no useful information.
+
+For substantial work, prefer this lifecycle:
+
+```text
+Issue / Epic
+    -> Why + Outcome + constraints
+    -> small implementation increments
+    -> feature/refactor branch from main
+    -> exact-SHA staging and validation
+    -> PR linked to the issue
+    -> merge to main
+    -> production verification where applicable
+    -> close issue when its Definition of Done is actually satisfied
+```
+
+Issue content should be concise but operationally useful. Include as appropriate:
+
+- Why / problem statement;
+- intended Outcome;
+- increments or acceptance criteria;
+- Non-goals when scope control matters;
+- Risk / blast radius and safety invariants;
+- dependencies or blockers;
+- Definition of Done;
+- known residual/follow-up work.
+
+Treat issue checklists as planning and evidence aids, not as substitutes for observed validation. Update issues when the plan materially changes, and close them only when the documented outcome is achieved or explicitly marked not planned.
