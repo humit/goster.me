@@ -266,6 +266,15 @@
 
     document.addEventListener("click", async event => {
         const compactMenu = event.target.closest("details.viewer-compact-menu");
+
+        // When an open menu owns the transparent full-screen dismiss layer,
+        // clicks on that layer target the <details> element itself. Close the
+        // menu before the iframe/content receives an accidental interaction.
+        if (compactMenu && compactMenu.open && event.target === compactMenu) {
+            compactMenu.removeAttribute("open");
+            return;
+        }
+
         if (!compactMenu) {
             closeCompactViewerMenus();
         }
