@@ -14,6 +14,7 @@ import threading
 import time
 
 from collections import OrderedDict, deque
+from datetime import datetime, timedelta, timezone
 from http.server import ThreadingHTTPServer
 from ipaddress import ip_address
 from pathlib import Path
@@ -191,8 +192,85 @@ legacy.get_item = get_item
 
 LEGACY_DOCUMENT = legacy.document
 
+PUBLIC_META_DESCRIPTION = (
+    "Bağlantılardaki video ve etkinlikleri gereksiz gezinme, reklam ve "
+    "dikkat dağıtıcı öğelerden ayırarak gösterir."
+)
 
-def product_document(title: str, body: str) -> str:
+
+def canonical_url(path: str) -> str:
+    return f"{PUBLIC_ORIGIN}{path}"
+
+
+def robots_text() -> str:
+    return "\n".join(
+        (
+            "User-agent: *",
+            "Allow: /",
+            "Disallow: /q/",
+            "Disallow: /qr/",
+            "Disallow: /g/",
+            "Disallow: /v/",
+            "Disallow: /resolve",
+            "Disallow: /api/",
+            "Disallow: /contact/thanks",
+            f"Sitemap: {canonical_url('/sitemap.xml')}",
+            "",
+        )
+    )
+
+
+def sitemap_xml() -> str:
+    urls = ("/", "/about", "/contact")
+    entries = "\n".join(
+        f"  <url><loc>{escape(canonical_url(path))}</loc></url>" for path in urls
+    )
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"{entries}\n"
+        "</urlset>\n"
+    )
+
+
+def security_text(*, now: datetime | None = None) -> str:
+    current = now or datetime.now(timezone.utc)
+    expires = current + timedelta(days=180)
+    return "\n".join(
+        (
+            f"Contact: {canonical_url('/contact')}",
+            f"Expires: {expires.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+            "Preferred-Languages: tr, en",
+            f"Canonical: {canonical_url('/.well-known/security.txt')}",
+            "Policy: https://github.com/humit/goster.me/blob/main/docs/SECURITY_ARCHITECTURE.md",
+            "",
+        )
+    )
+
+
+def robots_directive_for_target(target: str) -> str | None:
+    parsed = urlparse(target)
+    path = parsed.path
+    parts = [part for part in path.split("/") if part]
+    dynamic_route = (
+        path in {"/resolve", "/contact/thanks"}
+        or (path == "/contact" and bool(parsed.query))
+        or path.startswith("/api/")
+        or (len(parts) == 2 and parts[0] in {"q", "qr", "g", "v"})
+        or (len(parts) == 1 and SHORT_CODE_RE.fullmatch(parts[0].lower()))
+    )
+    if dynamic_route:
+        return "noindex, nofollow, noarchive"
+    return None
+
+
+def product_document(
+    title: str,
+    body: str,
+    *,
+    description: str | None = None,
+    canonical_path: str | None = None,
+) -> str:
     """Shared HTML shell.
 
     Presentation lives in static/product.css and behavior in static/product.js
@@ -205,6 +283,8 @@ def product_document(title: str, body: str) -> str:
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b0d10">
 <title>{escape(title)}</title>
+{f'<meta name="description" content="{escape(description)}">' if description else ''}
+{f'<link rel="canonical" href="{escape(canonical_url(canonical_path))}">' if canonical_path else ''}
 {legacy.BASE_STYLE}
 <link rel="stylesheet" href="/static/product.css">
 </head>
@@ -256,6 +336,8 @@ def render_home(campaign: str | None = None) -> str:
     </section>
 </main>
 """,
+        description=PUBLIC_META_DESCRIPTION,
+        canonical_path="/",
     )
 
 
@@ -322,6 +404,8 @@ def render_about() -> str:
     </article>
 </main>
 """,
+        description="goster.me'nin içerik sadeleştirme, güvenlik ve mahremiyet yaklaşımı.",
+        canonical_path="/about",
     )
 
 
@@ -389,6 +473,8 @@ def render_contact(
     </section>
 </main>
 """,
+        description="goster.me için sorun bildirimi ve ürün önerisi iletişim formu.",
+        canonical_path="/contact",
     )
 
 
@@ -634,6 +720,9 @@ class Handler(legacy.Handler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("X-Frame-Options", "DENY")
+        robots = robots_directive_for_target(getattr(self, "path", ""))
+        if robots:
+            self.send_header("X-Robots-Tag", robots)
         self.send_header(
             "Permissions-Policy",
             "camera=(), microphone=(), geolocation=(), payment=()",
@@ -685,6 +774,33 @@ class Handler(legacy.Handler):
         parsed = urlparse(self.path)
         path = parsed.path
         parts = [part for part in path.split("/") if part]
+
+        if path == "/robots.txt" and not parsed.query:
+            self.send_bytes(
+                200,
+                robots_text().encode("utf-8"),
+                "text/plain; charset=utf-8",
+                cache_control="public, max-age=3600",
+            )
+            return
+
+        if path == "/sitemap.xml" and not parsed.query:
+            self.send_bytes(
+                200,
+                sitemap_xml().encode("utf-8"),
+                "application/xml; charset=utf-8",
+                cache_control="public, max-age=3600",
+            )
+            return
+
+        if path == "/.well-known/security.txt" and not parsed.query:
+            self.send_bytes(
+                200,
+                security_text().encode("utf-8"),
+                "text/plain; charset=utf-8",
+                cache_control="public, max-age=3600",
+            )
+            return
 
         if path == "/":
             query = parse_qs(parsed.query, keep_blank_values=True)
