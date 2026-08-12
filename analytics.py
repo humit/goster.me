@@ -14,7 +14,6 @@ from pathlib import Path
 DATABASE_PATH = Path(os.environ.get("GOSTER_DATABASE", "/var/lib/goster.me/goster.sqlite3"))
 RAW_RETENTION_SECONDS = int(os.environ.get("GOSTER_ANALYTICS_RETENTION_SECONDS", str(30 * 24 * 60 * 60)))
 CAMPAIGN_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
-CODE_RE = re.compile(r"^[a-z0-9]{4,16}$")
 EVENTS = frozenset({
     "landing_view",
     "resolve_attempt",
@@ -48,7 +47,6 @@ class AnalyticsStore:
                     provider TEXT,
                     adapter TEXT,
                     render_mode TEXT,
-                    code TEXT,
                     outcome TEXT
                 )
                 """
@@ -74,24 +72,21 @@ class AnalyticsStore:
 
     def record(self, event: str, *, now: int | None = None, campaign: str | None = None,
                provider: str | None = None, adapter: str | None = None,
-               render_mode: str | None = None, code: str | None = None,
+               render_mode: str | None = None,
                outcome: str | None = None) -> None:
         if event not in EVENTS:
             raise ValueError("Unsupported analytics event.")
-        normalized_code = (code or "").strip().lower() or None
-        if normalized_code is not None and not CODE_RE.fullmatch(normalized_code):
-            raise ValueError("Invalid analytics code.")
         with self._connect() as db:
             db.execute(
                 """
                 INSERT INTO analytics_events (
-                    occurred_at, event, campaign, provider, adapter, render_mode, code, outcome
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    occurred_at, event, campaign, provider, adapter, render_mode, outcome
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     int(time.time() if now is None else now), event, clean_campaign(campaign),
                     self._token(provider), self._token(adapter), self._token(render_mode),
-                    normalized_code, self._token(outcome),
+                    self._token(outcome),
                 ),
             )
 
