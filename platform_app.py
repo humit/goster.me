@@ -120,10 +120,11 @@ def compact_preview_actions(
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
 }}
-.viewer-compact-row {{
-    display: flex;
+.viewer-compact-grid {{
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: .35rem;
-    align-items: center;
+    align-items: stretch;
 }}
 .viewer-compact-action,
 .viewer-source-summary {{
@@ -131,6 +132,7 @@ def compact_preview_actions(
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    box-sizing: border-box;
     padding: 0 .7rem;
     border: 0;
     border-radius: .6rem;
@@ -141,17 +143,21 @@ def compact_preview_actions(
     text-decoration: none;
     cursor: pointer;
 }}
-.viewer-compact-row .viewer-compact-action {{ flex: 1; }}
-.viewer-source {{ margin-top: .4rem; }}
+.viewer-source {{
+    min-width: 0;
+    margin: 0;
+}}
+.viewer-source[open] {{ grid-column: 1 / -1; }}
 .viewer-source-summary {{
     width: 100%;
-    box-sizing: border-box;
-    justify-content: flex-start;
+    justify-content: center;
     list-style: none;
     color: rgba(255,255,255,.76);
 }}
 .viewer-source-summary::-webkit-details-marker {{ display: none; }}
-.viewer-source-body {{ padding: .5rem .2rem .1rem; }}
+.viewer-source-body {{
+    padding: .5rem .2rem .1rem;
+}}
 .viewer-source-url {{
     max-height: 5rem;
     overflow: auto;
@@ -174,22 +180,24 @@ def compact_preview_actions(
         <span class="viewer-compact-dots" aria-hidden="true">•••</span>
     </summary>
     <div class="viewer-compact-panel">
-        <div class="viewer-compact-row">
+        <div class="viewer-compact-grid">
             <button class="viewer-compact-action" type="button" data-action="share" data-url="{canonical}">Paylaş</button>
             <a class="viewer-compact-action" href="/q/{app.escape(item_id)}" data-action="qr">QR</a>
+            <a class="viewer-compact-action" href="/">Ana Sayfa</a>
+            <details class="viewer-source">
+                <summary class="viewer-source-summary">Kaynak</summary>
+                <div class="viewer-source-body">
+                    <div class="viewer-source-label">Kaynak: {app.escape(source_host)}</div>
+                    <div class="viewer-source-url">{app.escape(source_url)}</div>
+                    <button
+                        class="viewer-compact-action"
+                        type="button"
+                        data-action="copy"
+                        data-url="{app.escape(source_url)}"
+                    >URL'yi kopyala</button>
+                </div>
+            </details>
         </div>
-        <details class="viewer-source">
-            <summary class="viewer-source-summary">Kaynak: {app.escape(source_host)}</summary>
-            <div class="viewer-source-body">
-                <div class="viewer-source-url">{app.escape(source_url)}</div>
-                <button
-                    class="viewer-compact-action"
-                    type="button"
-                    data-action="copy"
-                    data-url="{app.escape(source_url)}"
-                >URL'yi kopyala</button>
-            </div>
-        </details>
     </div>
 </details>
 """
