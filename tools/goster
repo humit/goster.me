@@ -1,0 +1,278 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_ROOT="${GOSTER_APP_ROOT:-/opt/goster.me}"
+APP_USER="${GOSTER_APP_USER:-gosterme}"
+STAGE_ROOT="${GOSTER_STAGE_ROOT:-${APP_ROOT}/.stage}"
+STAGE_DIR="${STAGE_ROOT}/current"
+STAGE_STATE="${STAGE_ROOT}/state"
+PYTHON="${GOSTER_PYTHON:-${APP_ROOT}/.venv/bin/python}"
+ENV_FILE="${GOSTER_ENV_FILE:-/etc/goster.me/gosterme.env}"
+MAIN_SERVICE="${GOSTER_MAIN_SERVICE:-gosterme.service}"
+SANDBOX_SERVICE="${GOSTER_SANDBOX_SERVICE:-gosterme-sandbox.service}"
+
+log() {
+    printf '[goster] %s\n' "$*"
+}
+
+die() {
+    printf '[goster] ERROR: %s\n' "$*" >&2
+    exit 1
+}
+
+run_app() {
+    if [ "$(id -un)" = "$APP_USER" ]; then
+        "$@"
+    else
+        sudo -u "$APP_USER" -H "$@"
+    fi
+}
+
+require_path() {
+    [ -e "$1" ] || die "required path not found: $1"
+}
+
+require_repo() {
+    require_path "${APP_ROOT}/.git"
+    run_app git -C "$APP_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+        || die "not a Git work tree: $APP_ROOT"
+}
+
+fetch_origin() {
+    log "fetching origin"
+    run_app git -C "$APP_ROOT" fetch --prune origin
+}
+
+resolve_ref() {
+    local ref="$1"
+    local candidate
+
+    if run_app git -C "$APP_ROOT" show-ref --verify --quiet "refs/remotes/origin/${ref}"; then
+        candidate="origin/${ref}"
+    else
+        candidate="$ref"
+    fi
+
+    run_app git -C "$APP_ROOT" rev-parse --verify "${candidate}^{commit}"
+}
+
+write_stage_state() {
+    local ref="$1"
+    local sha="$2"
+
+    run_app mkdir -p "$STAGE_ROOT"
+    printf 'ref=%s\nsha=%s\n' "$ref" "$sha" \
+        | run_app tee "$STAGE_STATE" >/dev/null
+    run_app chmod 0640 "$STAGE_STATE"
+}
+
+read_state_value() {
+    local key="$1"
+    [ -f "$STAGE_STATE" ] || return 1
+    run_app awk -F= -v key="$key" \
+        '$1 == key {print substr($0, length(key) + 2)}' "$STAGE_STATE"
+}
+
+cmd_stage() {
+    local ref="${1:-}"
+    [ -n "$ref" ] || die "usage: tools/goster stage <ref>"
+
+    require_repo
+    fetch_origin
+
+    local sha
+    sha="$(resolve_ref "$ref")"
+
+    log "resolved $ref -> $sha"
+    run_app mkdir -p "$STAGE_ROOT"
+
+    if [ -e "$STAGE_DIR" ]; then
+        log "removing previous disposable stage worktree"
+        run_app git -C "$APP_ROOT" worktree remove --force "$STAGE_DIR"
+    fi
+
+    run_app git -C "$APP_ROOT" worktree prune
+    run_app git -C "$APP_ROOT" worktree add --detach "$STAGE_DIR" "$sha"
+
+    write_stage_state "$ref" "$sha"
+
+    local staged_sha
+    staged_sha="$(run_app git -C "$STAGE_DIR" rev-parse HEAD)"
+    [ "$staged_sha" = "$sha" ] \
+        || die "staged SHA mismatch: expected $sha got $staged_sha"
+
+    log "staged exact SHA: $sha"
+    log "worktree: $STAGE_DIR"
+    log "next: tools/goster stage-test"
+}
+
+cmd_stage_status() {
+    require_repo
+
+    if [ ! -d "$STAGE_DIR" ]; then
+        log "stage: absent"
+        return 0
+    fi
+
+    local sha ref state_sha
+    sha="$(run_app git -C "$STAGE_DIR" rev-parse HEAD)"
+    ref="$(read_state_value ref || true)"
+    state_sha="$(read_state_value sha || true)"
+
+    printf 'stage_dir: %s\n' "$STAGE_DIR"
+    printf 'stage_ref: %s\n' "${ref:-unknown}"
+    printf 'stage_sha: %s\n' "$sha"
+    printf 'state_sha: %s\n' "${state_sha:-missing}"
+    printf 'stage_clean: '
+    if [ -z "$(run_app git -C "$STAGE_DIR" status --porcelain)" ]; then
+        printf 'yes\n'
+    else
+        printf 'no\n'
+    fi
+}
+
+load_signing_key() {
+    if [ -n "${GOSTER_SANDBOX_SIGNING_KEY:-}" ]; then
+        printf '%s' "$GOSTER_SANDBOX_SIGNING_KEY"
+        return 0
+    fi
+
+    [ -r "$ENV_FILE" ] || sudo test -r "$ENV_FILE" \
+        || die "cannot read environment file: $ENV_FILE"
+
+    if [ "$(id -un)" = "$APP_USER" ]; then
+        awk -F= '$1=="GOSTER_SANDBOX_SIGNING_KEY" {print substr($0, index($0,"=")+1); exit}' "$ENV_FILE"
+    else
+        sudo awk -F= '$1=="GOSTER_SANDBOX_SIGNING_KEY" {print substr($0, index($0,"=")+1); exit}' "$ENV_FILE"
+    fi
+}
+
+cmd_stage_test() {
+    require_path "$PYTHON"
+    [ -d "$STAGE_DIR" ] \
+        || die "stage worktree does not exist; run: tools/goster stage <ref>"
+
+    local expected_sha actual_sha key test_db
+    expected_sha="$(read_state_value sha || true)"
+    actual_sha="$(run_app git -C "$STAGE_DIR" rev-parse HEAD)"
+
+    [ -n "$expected_sha" ] || die "stage state is missing expected SHA"
+    [ "$expected_sha" = "$actual_sha" ] \
+        || die "stage state mismatch: expected $expected_sha got $actual_sha"
+    [ -z "$(run_app git -C "$STAGE_DIR" status --porcelain)" ] \
+        || die "stage worktree is not clean"
+
+    key="$(load_signing_key)"
+    [ "${#key}" -ge 32 ] || die "sandbox signing key is missing or too short"
+
+    test_db="/tmp/goster-stage-test-${actual_sha}.sqlite3"
+    run_app rm -f "$test_db"
+
+    log "running full regression suite at exact SHA $actual_sha"
+    run_app env \
+        GOSTER_SANDBOX_SIGNING_KEY="$key" \
+        GOSTER_SANDBOX_ORIGIN="https://s.goster.me" \
+        GOSTER_DATABASE="$test_db" \
+        bash -c 'cd "$1" && exec "$2" -m unittest discover -v' \
+        bash "$STAGE_DIR" "$PYTHON"
+
+    run_app rm -f "$test_db"
+    log "stage tests passed: $actual_sha"
+}
+
+cmd_prod_preflight() {
+    require_repo
+    fetch_origin
+
+    local branch head remote_main tracked_changes
+    branch="$(run_app git -C "$APP_ROOT" symbolic-ref --quiet --short HEAD || true)"
+    head="$(run_app git -C "$APP_ROOT" rev-parse HEAD)"
+    remote_main="$(run_app git -C "$APP_ROOT" rev-parse origin/main)"
+    tracked_changes="$(run_app git -C "$APP_ROOT" status --porcelain --untracked-files=no)"
+
+    printf 'branch: %s\n' "${branch:-detached}"
+    printf 'head: %s\n' "$head"
+    printf 'origin_main: %s\n' "$remote_main"
+
+    [ "$branch" = "main" ] || die "production checkout is not on main"
+    [ -z "$tracked_changes" ] || die "production checkout has tracked changes"
+    [ "$head" = "$remote_main" ] \
+        || die "production HEAD does not match origin/main"
+
+    log "production Git preflight passed"
+}
+
+service_pid() {
+    systemctl show -p MainPID --value "$1" 2>/dev/null || true
+}
+
+cmd_prod_status() {
+    require_repo
+
+    local branch head main_pid sandbox_pid
+    branch="$(run_app git -C "$APP_ROOT" symbolic-ref --quiet --short HEAD || true)"
+    head="$(run_app git -C "$APP_ROOT" rev-parse HEAD)"
+    main_pid="$(service_pid "$MAIN_SERVICE")"
+    sandbox_pid="$(service_pid "$SANDBOX_SERVICE")"
+
+    printf 'branch: %s\n' "${branch:-detached}"
+    printf 'head: %s\n' "$head"
+    printf 'main_service: %s\n' "$(systemctl is-active "$MAIN_SERVICE" 2>/dev/null || true)"
+    printf 'main_pid: %s\n' "${main_pid:-0}"
+    printf 'sandbox_service: %s\n' "$(systemctl is-active "$SANDBOX_SERVICE" 2>/dev/null || true)"
+    printf 'sandbox_pid: %s\n' "${sandbox_pid:-0}"
+
+    if command -v curl >/dev/null 2>&1; then
+        printf 'home_http: '
+        curl -sS -o /dev/null -w '%{http_code}\n' https://goster.me/ || true
+        printf 'sandbox_bare_http: '
+        curl -sS -o /dev/null -w '%{http_code}\n' https://s.goster.me/v/invalid || true
+    fi
+}
+
+usage() {
+    cat <<'EOF'
+Usage:
+  tools/goster stage <ref>
+  tools/goster stage-status
+  tools/goster stage-test
+  tools/goster prod-preflight
+  tools/goster prod-status
+
+This first deployment-workflow increment is intentionally read-mostly for production.
+It prepares and validates exact-SHA staging worktrees and verifies production state.
+Production mutation commands (deploy-main / rollback) are added only after this state
+model is validated on the real host.
+EOF
+}
+
+main() {
+    local command="${1:-}"
+    shift || true
+
+    case "$command" in
+        stage)
+            cmd_stage "$@"
+            ;;
+        stage-status)
+            cmd_stage_status
+            ;;
+        stage-test)
+            cmd_stage_test
+            ;;
+        prod-preflight)
+            cmd_prod_preflight
+            ;;
+        prod-status)
+            cmd_prod_status
+            ;;
+        -h|--help|help|"")
+            usage
+            ;;
+        *)
+            die "unknown command: $command"
+            ;;
+    esac
+}
+
+main "$@"
