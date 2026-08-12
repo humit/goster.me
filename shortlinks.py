@@ -29,6 +29,18 @@ DATABASE_PATH = Path(
         "/var/lib/goster.me/goster.sqlite3",
     )
 )
+DATABASE_MAX_BYTES = int(
+    os.environ.get("GOSTER_DATABASE_MAX_BYTES", str(128 * 1024 * 1024))
+)
+DATABASE_MAX_ROWS = int(
+    os.environ.get("GOSTER_DATABASE_MAX_ROWS", "50000")
+)
+DATABASE_TARGET_ROWS = int(
+    os.environ.get("GOSTER_DATABASE_TARGET_ROWS", "45000")
+)
+MAX_PAYLOAD_BYTES = int(
+    os.environ.get("GOSTER_MAX_PAYLOAD_BYTES", str(256 * 1024))
+)
 
 
 class ShortLinkStore:
@@ -38,16 +50,36 @@ class ShortLinkStore:
         *,
         ttl_seconds: int = DEFAULT_TTL_SECONDS,
         code_length: int = SHORT_CODE_LENGTH,
+        database_max_bytes: int = DATABASE_MAX_BYTES,
+        max_rows: int = DATABASE_MAX_ROWS,
+        target_rows: int = DATABASE_TARGET_ROWS,
+        max_payload_bytes: int = MAX_PAYLOAD_BYTES,
     ) -> None:
         self.path = Path(path)
         self.ttl_seconds = ttl_seconds
         self.code_length = code_length
+        self.database_max_bytes = database_max_bytes
+        self.max_rows = max_rows
+        self.target_rows = target_rows
+        self.max_payload_bytes = max_payload_bytes
 
         if self.code_length < 4:
             raise ValueError("Short-code length must be at least 4.")
 
         if self.ttl_seconds <= 0:
             raise ValueError("TTL must be positive.")
+
+        if self.database_max_bytes < 1024 * 1024:
+            raise ValueError("database_max_bytes must be at least 1 MiB.")
+
+        if self.max_rows <= 0:
+            raise ValueError("max_rows must be positive.")
+
+        if self.target_rows <= 0 or self.target_rows > self.max_rows:
+            raise ValueError("target_rows must be positive and <= max_rows.")
+
+        if self.max_payload_bytes <= 0:
+            raise ValueError("max_payload_bytes must be positive.")
 
         self.path.parent.mkdir(
             parents=True,
@@ -62,6 +94,23 @@ class ShortLinkStore:
             timeout=10,
         )
         connection.row_factory = sqlite3.Row
+
+        # max_page_count is a run-time connection limit, not a persistent
+        # database setting. Apply it every time this application opens SQLite.
+        page_size = int(connection.execute("PRAGMA page_size").fetchone()[0])
+        max_pages = max(1, self.database_max_bytes // page_size)
+        applied = int(
+            connection.execute(
+                f"PRAGMA max_page_count={max_pages}"
+            ).fetchone()[0]
+        )
+
+        if applied * page_size > self.database_max_bytes:
+            connection.close()
+            raise RuntimeError(
+                "Database already exceeds configured byte cap."
+            )
+
         return connection
 
     def _init_db(self) -> None:
@@ -112,6 +161,45 @@ class ShortLinkStore:
 
         return ResolvedContent(**data)
 
+    def _enforce_row_quota(self, db: sqlite3.Connection, timestamp: int) -> None:
+        rows = int(
+            db.execute("SELECT COUNT(*) FROM short_links").fetchone()[0]
+        )
+
+        if rows < self.max_rows:
+            return
+
+        # Only pay the cost of expiry cleanup when the row ceiling is actually
+        # reached. Normal writes keep their previous semantics, while an abuse
+        # burst cannot grow the table past the configured ceiling.
+        db.execute(
+            "DELETE FROM short_links WHERE expires_at <= ?",
+            (timestamp,),
+        )
+
+        rows = int(
+            db.execute("SELECT COUNT(*) FROM short_links").fetchone()[0]
+        )
+
+        if rows < self.max_rows:
+            return
+
+        trim_count = max(1, rows - self.target_rows + 1)
+        db.execute(
+            """
+            DELETE FROM short_links
+            WHERE code IN (
+                SELECT code
+                FROM short_links
+                ORDER BY
+                    COALESCE(last_accessed_at, created_at) ASC,
+                    created_at ASC
+                LIMIT ?
+            )
+            """,
+            (trim_count,),
+        )
+
     def save(
         self,
         item: ResolvedContent,
@@ -126,6 +214,9 @@ class ShortLinkStore:
         expires_at = timestamp + self.ttl_seconds
         payload = self._serialize(item)
 
+        if len(payload.encode("utf-8")) > self.max_payload_bytes:
+            raise ValueError("Resolved content payload is too large.")
+
         # Collision probability is tiny, but the database remains the source
         # of truth and we retry rather than assuming uniqueness.
         for _ in range(32):
@@ -133,6 +224,7 @@ class ShortLinkStore:
 
             try:
                 with self._connect() as db:
+                    self._enforce_row_quota(db, timestamp)
                     db.execute(
                         """
                         INSERT INTO short_links (
