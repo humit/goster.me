@@ -239,17 +239,17 @@
     }
 
     function shareMessage(title, url) {
-        return `${title}\n\ngoster.me ile dikkat dağıtıcı öğelerden arındırılmış temiz görünüm:\n${url}`;
+        return `${title}\n${url}\n\n[ dikkat dağıtıcı öğelerden arındırılmış temiz içerik - https://goster.me ]`;
     }
 
     async function handleShare(element) {
         const url = actionUrl(element);
         const title = element.dataset.title || document.title;
-        const text = `${title}\n\ngoster.me ile dikkat dağıtıcı öğelerden arındırılmış temiz görünüm:`;
+        const text = shareMessage(title, url);
 
         if (navigator.share) {
             try {
-                await navigator.share({ title, text, url });
+                await navigator.share({ text });
                 recordProductEvent("share_click", element);
                 return;
             } catch (error) {
@@ -259,7 +259,7 @@
             }
         }
 
-        const ok = await copyText(shareMessage(title, url));
+        const ok = await copyText(text);
         showToast(ok ? "Paylaşım metni kopyalandı" : "Bu tarayıcıda paylaşım kullanılamıyor");
     }
 
