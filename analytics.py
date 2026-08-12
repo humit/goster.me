@@ -22,6 +22,7 @@ EVENTS = frozenset({
     "viewer_open",
     "copy_click",
     "share_click",
+    "feedback_submitted",
 })
 
 # Product timeline milestones are fixed Unix timestamps so reports remain independent

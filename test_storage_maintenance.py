@@ -9,6 +9,7 @@ from pathlib import Path
 
 from adapters import ResolvedContent
 from shortlinks import ShortLinkStore
+from feedback import FeedbackStore
 from storage_maintenance import maintain_database
 
 
@@ -51,6 +52,25 @@ class StorageMaintenanceTests(unittest.TestCase):
 
         self.assertEqual(stats["expired"], 1)
         self.assertEqual(stats["remaining"], 1)
+
+    def test_purges_expired_feedback(self):
+        feedback = FeedbackStore(
+            self.path,
+            database_max_bytes=8 * 1024 * 1024,
+            max_rows=100,
+            target_rows=80,
+        )
+        feedback.submit("problem", "Eski geri bildirim", now=100)
+
+        stats = maintain_database(
+            self.path,
+            now=100 + 91 * 24 * 60 * 60,
+            max_rows=10,
+            target_rows=8,
+            max_bytes=8 * 1024 * 1024,
+        )
+
+        self.assertEqual(stats["feedback_purged"], 1)
 
     def test_trims_oldest_rows_to_target(self):
         for timestamp in range(100, 106):

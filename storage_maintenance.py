@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from analytics import RAW_RETENTION_SECONDS
+from feedback import RAW_RETENTION_SECONDS as FEEDBACK_RETENTION_SECONDS
 
 
 DATABASE_PATH = Path(
@@ -75,6 +76,16 @@ def maintain_database(
                 (timestamp - RAW_RETENTION_SECONDS,),
             ).rowcount
 
+        feedback_purged = 0
+        feedback_table = db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'feedback_messages'"
+        ).fetchone()
+        if feedback_table is not None:
+            feedback_purged = db.execute(
+                "DELETE FROM feedback_messages WHERE created_at < ?",
+                (timestamp - FEEDBACK_RETENTION_SECONDS,),
+            ).rowcount
+
         rows = int(db.execute("SELECT COUNT(*) FROM short_links").fetchone()[0])
         trimmed = 0
 
@@ -103,6 +114,7 @@ def maintain_database(
     return {
         "expired": expired,
         "analytics_purged": analytics_purged,
+        "feedback_purged": feedback_purged,
         "trimmed": trimmed,
         "remaining": remaining,
         "page_size": page_size,

@@ -38,6 +38,10 @@ class AnalyticsStoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.record("page_view")
 
+    def test_accepts_anonymous_feedback_event(self):
+        self.store.record("feedback_submitted", now=100)
+        self.assertEqual(self.store.summary(since=0), [("feedback_submitted", 1)])
+
     def test_invalid_campaign_is_discarded(self):
         self.assertIsNone(clean_campaign("parent@example.com"))
         self.assertEqual(clean_campaign("Veli-WhatsApp-2026-08"), "veli-whatsapp-2026-08")

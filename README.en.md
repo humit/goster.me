@@ -194,6 +194,23 @@ python3 -m unittest -v test_shortlinks.py
 For adapter development, validate representative URLs with `test-adapter` and run a
 full corpus regression before milestones.
 
+## Private feedback
+
+The **Contact** link opens a local message form that does not require a GitHub
+account. Messages are not public and are available only to the operator through the
+CLI-backed SQLite store. The form does not request or persist a name, email address,
+phone number, IP address, User-Agent or referrer, and explicitly asks users not to
+include children's names or other personal information.
+
+```bash
+tools/goster feedback list
+tools/goster feedback ack <receipt>
+```
+
+Messages are removed after 90 days by default. In-memory rate limiting, bounded form
+and message sizes, field allowlisting, same-origin checks and a honeypot field limit
+basic abuse without adding a third-party service.
+
 ## Security model
 
 goster.me is not an unrestricted web proxy. Its core approach is **content

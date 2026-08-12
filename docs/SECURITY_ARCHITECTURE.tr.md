@@ -95,6 +95,12 @@ Sistem mümkün olduğunda isolated content içindeki bilinen reklam ve analytic
 
 Bunlar defense-in-depth ve privacy katmanlarıdır; origin separation veya browser sandbox yerine geçmez.
 
+Public geri bildirim formu yalnızca allowlist içindeki konu türünü, mesaj metnini,
+alındı kodunu, timestamp'leri ve inceleme durumunu saklar. Ad, yanıt adresi, IP
+adresi, User-Agent veya referrer istemez ve kalıcılaştırmaz. Geri bildirim yalnızca
+operatör tarafından görülebilir; row/database limitleri, request/abuse kontrolleri
+ve otomatik retention temizliği ile sınırlandırılır.
+
 ## Storage ve process kontrolleri
 
 Application storage row, payload ve database-growth limitleriyle sınırlandırılır; expired data için periodic maintenance uygulanır.

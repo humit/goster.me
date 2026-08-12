@@ -230,6 +230,12 @@ cmd_prod_status() {
     fi
 }
 
+cmd_feedback() {
+    require_repo
+    require_path "$PYTHON"
+    run_app "$PYTHON" "$APP_ROOT/feedback.py" "$@"
+}
+
 usage() {
     cat <<'EOF'
 Usage:
@@ -238,6 +244,9 @@ Usage:
   tools/goster stage-test
   tools/goster prod-preflight
   tools/goster prod-status
+  tools/goster feedback list [--status unread|reviewed|all] [--limit N]
+  tools/goster feedback ack <receipt>
+  tools/goster feedback purge
 
 This first deployment-workflow increment is intentionally read-mostly for production.
 It prepares and validates exact-SHA staging worktrees and verifies production state.
@@ -265,6 +274,9 @@ main() {
             ;;
         prod-status)
             cmd_prod_status
+            ;;
+        feedback)
+            cmd_feedback "$@"
             ;;
         -h|--help|help|"")
             usage
