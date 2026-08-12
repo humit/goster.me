@@ -10,7 +10,7 @@ from io import BytesIO
 from urllib.parse import parse_qs, urljoin, urlparse
 from urllib.request import Request, urlopen
 
-from goster_adapters import (
+from gosterme_adapters import (
     AdapterError,
     AdapterRegistry,
     ContentAdapter,

@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 import adapters
-import goster_adapters
+import gosterme_adapters
 
 
 class CompatibilityFacadeTests(unittest.TestCase):
@@ -19,7 +19,7 @@ class CompatibilityFacadeTests(unittest.TestCase):
             "NotApplicable",
             "ContentAdapter",
         ):
-            self.assertIs(getattr(adapters, name), getattr(goster_adapters, name))
+            self.assertIs(getattr(adapters, name), getattr(gosterme_adapters, name))
 
     def test_facade_uses_runtime_normalizer_and_patchable_registry(self):
         resolved = adapters.ResolvedContent(
@@ -77,7 +77,7 @@ class AdapterRegistryTests(unittest.TestCase):
             provider="fixture",
             source_url="https://example.com",
         )
-        registry = goster_adapters.AdapterRegistry(
+        registry = gosterme_adapters.AdapterRegistry(
             [Candidate("first"), Candidate("second", result)]
         )
 
