@@ -4,9 +4,14 @@
     if (home) {
         const button = home.querySelector(".url-submit");
         if (button) {
-            button.textContent = "→";
-            button.setAttribute("aria-label", "Bağlantıyı aç");
+            button.textContent = "goster.me";
+            button.setAttribute("aria-label", "Bağlantıyı goster.me ile aç");
             button.setAttribute("title", "Bağlantıyı aç");
+        }
+
+        const wordmark = home.querySelector(".minimal-wordmark");
+        if (wordmark) {
+            wordmark.setAttribute("aria-hidden", "true");
         }
 
         const style = document.createElement("style");
@@ -57,18 +62,13 @@
             }
 
             .minimal-wordmark {
-                order: 3;
-                margin: 1.1rem 0 0 auto !important;
-                color: var(--g-muted) !important;
-                font-size: .76rem !important;
-                font-weight: 540 !important;
-                letter-spacing: -.012em !important;
+                display: none !important;
             }
 
             .product-url-form {
                 order: 1;
-                grid-template-columns: minmax(0, 1fr) 2.7rem !important;
-                gap: 0 !important;
+                grid-template-columns: minmax(0, 1fr) auto !important;
+                gap: .45rem !important;
                 padding: 0 !important;
                 border: 0 !important;
                 border-bottom: 1px solid var(--g-border) !important;
@@ -99,20 +99,22 @@
             }
 
             .product-url-form button {
-                width: 2.7rem !important;
-                min-width: 2.7rem !important;
+                width: auto !important;
+                min-width: 0 !important;
                 height: 3.2rem !important;
                 min-height: 3.2rem !important;
-                padding: 0 !important;
+                padding: 0 .1rem 0 .35rem !important;
                 border-radius: 0 !important;
                 background: transparent !important;
                 color: var(--g-accent) !important;
-                font-size: 1.25rem !important;
-                font-weight: 350 !important;
+                font-size: .82rem !important;
+                font-weight: 610 !important;
+                letter-spacing: -.015em !important;
             }
 
             .product-url-form button:hover {
-                background: var(--g-surface-soft) !important;
+                background: transparent !important;
+                color: var(--g-accent-hover) !important;
             }
 
             .minimal-links {
@@ -139,7 +141,7 @@
         document.head.appendChild(style);
 
         const tag = document.createElement("div");
-        tag.textContent = "tool-first · v3";
+        tag.textContent = "tool-first · v4";
         tag.setAttribute("aria-hidden", "true");
         Object.assign(tag.style, {
             position: "fixed",
