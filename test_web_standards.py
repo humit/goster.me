@@ -189,6 +189,24 @@ class PublicWebStandardsTests(unittest.TestCase):
         get.assert_called_once_with("abc346", touch=False)
         record.assert_not_called()
 
+    def test_caddy_example_stages_a_main_origin_only_hsts_canary(self):
+        config = (
+            Path(__file__).resolve().parent
+            / "deploy/caddy-platform-hardening.Caddyfile.example"
+        ).read_text()
+        hsts_lines = [
+            line.strip()
+            for line in config.splitlines()
+            if line.strip().startswith("Strict-Transport-Security ")
+        ]
+
+        self.assertEqual(
+            hsts_lines,
+            ['Strict-Transport-Security "max-age=300"'],
+        )
+        self.assertNotIn("includeSubDomains", hsts_lines[0])
+        self.assertNotIn("preload", hsts_lines[0])
+
     def test_caddy_example_exposes_only_sandbox_viewer_and_robots_routes(self):
         config = (
             Path(__file__).resolve().parent
