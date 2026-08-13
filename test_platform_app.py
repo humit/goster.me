@@ -37,17 +37,24 @@ class PlatformSandboxTests(unittest.TestCase):
         with patch.object(platform_app.app.STORE, "get", return_value=item):
             page = platform_app.compact_preview_actions("abc346")
 
+        stylesheet = (
+            platform_app.app.STATIC_DIR / "viewer-controls.css"
+        ).read_text()
+
         self.assertIn('class="viewer-compact-brand">goster.me</span>', page)
         self.assertIn('class="viewer-compact-dots" aria-hidden="true">•••</span>', page)
-        self.assertIn("bottom: max(4.75rem", page)
-        self.assertNotIn("top: 48%", page)
-        self.assertIn("viewer-compact-menu[open]::before", page)
-        self.assertIn("viewer-compact-grid", page)
+        self.assertNotIn("<style>", page)
+        self.assertIn("bottom: max(4.75rem", stylesheet)
+        self.assertNotIn("top: 48%", stylesheet)
+        self.assertIn("viewer-compact-menu[open]::before", stylesheet)
+        self.assertIn("viewer-compact-grid", stylesheet)
+        self.assertIn("background: var(--g-accent);", stylesheet)
+        self.assertIn("color: var(--g-accent-ink);", stylesheet)
         self.assertIn(">Paylaş</button>", page)
         self.assertIn(">QR</a>", page)
         self.assertIn('href="/">Ana Sayfa</a>', page)
         self.assertIn('href="/contact?from=abc346">İletişim</a>', page)
-        self.assertIn("grid-column: 1 / -1", page)
+        self.assertIn("grid-column: 1 / -1", stylesheet)
         self.assertIn(">Kaynak</summary>", page)
         self.assertNotIn("← Geri", page)
         self.assertNotIn(">Kopyala</button>", page)
@@ -98,11 +105,26 @@ class PlatformSandboxTests(unittest.TestCase):
         self.assertIn("https://s.goster.me/v/abc346?exp=", page)
         self.assertIn("&amp;sig=", page)
         self.assertIn(
+            '<link rel="stylesheet" '
+            f'href="{platform_app.app.static_asset_url("viewer-controls.css")}">',
+            page,
+        )
+        self.assertIn(
             "sandbox=\"allow-scripts allow-same-origin allow-modals "
             "allow-pointer-lock allow-presentation\"",
             page,
         )
         self.assertIn("viewer-compact-menu", page)
+
+    def test_viewer_document_loads_controls_without_affecting_stable_pages(self):
+        viewer = platform_app.viewer_document(
+            "Example",
+            '<main class="viewer-compact-menu"></main>',
+        )
+        stable = platform_app.app.render_about()
+
+        self.assertIn("/static/viewer-controls.css", viewer)
+        self.assertNotIn("/static/viewer-controls.css", stable)
 
     def test_sandbox_csp_allows_storage_but_keeps_parent_origin_restricted(self):
         handler = object.__new__(sandbox_app.Handler)

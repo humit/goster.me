@@ -53,6 +53,15 @@ FEEDBACK = FeedbackStore(STORE.path)
 UNSUPPORTED = UnsupportedTargetStore(STORE.path)
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "static"
+STATIC_ASSET_NAMES = (
+    "product.css",
+    "viewer-controls.css",
+    "product.js",
+)
+STATIC_ASSET_VERSIONS = {
+    name: hashlib.sha256((STATIC_DIR / name).read_bytes()).hexdigest()[:12]
+    for name in STATIC_ASSET_NAMES
+}
 PUBLIC_ORIGIN = public_origin()
 MAX_POST_BYTES = int(os.environ.get("GOSTER_MAX_POST_BYTES", "4096"))
 RESOLVE_RATE_PER_MINUTE = int(
@@ -67,6 +76,13 @@ MAX_FEEDBACK_POST_BYTES = int(
     os.environ.get("GOSTER_MAX_FEEDBACK_POST_BYTES", "4096")
 )
 FEEDBACK_FORM_TOKEN_TTL_SECONDS = 60 * 60
+
+THEME_META_COLORS = {
+    "default": ("#f7f7f4", "#0b0d10"),
+    "april-23": ("#fff8f8", "#160d0f"),
+    "new-year": ("#f5f8f5", "#0b120e"),
+    "november-10": ("#f5f5f2", "#0c0c0c"),
+}
 
 SHORT_CODE_RE = re.compile(
     rf"^[{re.escape(SHORT_CODE_ALPHABET)}]"
@@ -85,6 +101,17 @@ _ORIGINAL_RESOLVE_URL = legacy.resolve_url
 
 def escape(value: str | None) -> str:
     return html.escape(value or "", quote=True)
+
+
+def static_asset_url(name: str) -> str:
+    """Return a content-versioned URL for an allowlisted static asset."""
+    return f"/static/{name}?v={STATIC_ASSET_VERSIONS[name]}"
+
+
+def active_theme() -> str:
+    """Return an allowlisted presentation theme without trusting env as HTML."""
+    configured = os.environ.get("GOSTER_THEME", "default").strip().lower()
+    return configured if configured in THEME_META_COLORS else "default"
 
 
 def issue_feedback_form_token(*, now: int | None = None) -> str:
@@ -271,27 +298,37 @@ def product_document(
     description: str | None = None,
     canonical_path: str | None = None,
     document_class: str | None = None,
+    viewer_controls: bool = False,
 ) -> str:
     """Shared HTML shell.
 
-    Presentation lives in static/product.css and behavior in static/product.js
-    so contributors can work on UI without editing the Python renderer.
+    Presentation and theme tokens live in static/product.css, viewer-only rules
+    use a separate static stylesheet, and behavior lives in static/product.js.
     """
+    theme = active_theme()
+    light_theme_color, dark_theme_color = THEME_META_COLORS[theme]
+    optional_stylesheets = ""
+    if viewer_controls:
+        optional_stylesheets += (
+            f'<link rel="stylesheet" href="{static_asset_url("viewer-controls.css")}">\n'
+        )
+
     return f"""<!doctype html>
-<html lang="tr"{f' class="{escape(document_class)}"' if document_class else ''}>
+<html lang="tr" data-theme="{theme}"{f' class="{escape(document_class)}"' if document_class else ''}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0b0d10">
+<meta name="theme-color" content="{light_theme_color}" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="{dark_theme_color}" media="(prefers-color-scheme: dark)">
 <title>{escape(title)}</title>
 {f'<meta name="description" content="{escape(description)}">' if description else ''}
 {f'<link rel="canonical" href="{escape(canonical_url(canonical_path))}">' if canonical_path else ''}
 {legacy.BASE_STYLE}
-<link rel="stylesheet" href="/static/product.css">
-</head>
+<link rel="stylesheet" href="{static_asset_url("product.css")}">
+{optional_stylesheets}</head>
 <body>
 {body}
-<script src="/static/product.js" defer></script>
+<script src="{static_asset_url("product.js")}" defer></script>
 </body>
 </html>
 """
@@ -765,6 +802,7 @@ class Handler(legacy.Handler):
     def send_static(self, name: str) -> bool:
         allowed = {
             "product.css": "text/css; charset=utf-8",
+            "viewer-controls.css": "text/css; charset=utf-8",
             "product.js": "text/javascript; charset=utf-8",
         }
 

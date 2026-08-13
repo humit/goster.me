@@ -5,16 +5,46 @@
     --g-surface-soft: #f1f2ef;
     --g-border: #dde1dc;
     --g-text: #1b1e22;
-    --g-muted: #777e79;
+    --g-muted: #626b65;
     --g-accent: #9ad2ca;
     --g-accent-hover: #87c5bc;
     --g-accent-ink: #16312e;
+    --g-accent-text: #267b71;
+    --g-accent-text-hover: #1e625b;
     --g-focus: rgba(68, 145, 134, .24);
+    --g-danger: #a74646;
+    --g-success: #28754d;
+    --g-viewer-panel: var(--g-accent);
+    --g-viewer-control: rgba(0, 0, 0, .09);
+    --g-viewer-control-hover: rgba(0, 0, 0, .15);
+    --g-viewer-control-border: rgba(0, 0, 0, .24);
+    --g-viewer-text: var(--g-accent-ink);
+    --g-viewer-muted: var(--g-accent-ink);
     --g-radius-sm: 7px;
     --g-radius-md: 8px;
     --g-radius-lg: 10px;
     --g-content: 34rem;
     --g-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+    /* Compatibility aliases for the legacy shell loaded before this file. */
+    --bg: var(--g-bg);
+    --surface: var(--g-surface);
+    --surface-2: var(--g-surface-soft);
+    --border: var(--g-border);
+    --text: var(--g-text);
+    --muted: var(--g-muted);
+    --accent: var(--g-accent-text);
+    --accent-strong: var(--g-accent);
+    --success: var(--g-success);
+    --danger: var(--g-danger);
+}
+
+@supports (color: color-mix(in srgb, black 50%, transparent)) {
+    :root {
+        --g-viewer-control: color-mix(in srgb, var(--g-accent-ink) 9%, transparent);
+        --g-viewer-control-hover: color-mix(in srgb, var(--g-accent-ink) 15%, transparent);
+        --g-viewer-control-border: color-mix(in srgb, var(--g-accent-ink) 24%, transparent);
+    }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -24,11 +54,105 @@
         --g-surface-soft: #181c22;
         --g-border: #292e34;
         --g-text: #f0f2f1;
-        --g-muted: #8c9490;
+        --g-muted: #a0aaa4;
         --g-accent: #8bcac0;
         --g-accent-hover: #9bd6cd;
         --g-accent-ink: #102825;
+        --g-accent-text: #8bcac0;
+        --g-accent-text-hover: #b0e1da;
         --g-focus: rgba(139, 202, 192, .28);
+        --g-danger: #f0a2a2;
+        --g-success: #8ed6ad;
+    }
+}
+
+/* Optional themes replace semantic tokens only and add no runtime assets. */
+:root[data-theme="april-23"] {
+    --g-bg: #fff8f8;
+    --g-surface: #ffffff;
+    --g-surface-soft: #fcebed;
+    --g-border: #edd3d6;
+    --g-text: #27191b;
+    --g-muted: #706164;
+    --g-accent: #f3a4aa;
+    --g-accent-hover: #ed8a93;
+    --g-accent-ink: #4d0a10;
+    --g-accent-text: #b31522;
+    --g-accent-text-hover: #8e101a;
+    --g-focus: rgba(179, 21, 34, .24);
+}
+
+:root[data-theme="new-year"] {
+    --g-bg: #f5f8f5;
+    --g-surface: #ffffff;
+    --g-surface-soft: #eaf2ec;
+    --g-border: #d5e2d8;
+    --g-text: #17231c;
+    --g-muted: #5f6d64;
+    --g-accent: #b7d8c3;
+    --g-accent-hover: #a2cbb1;
+    --g-accent-ink: #173326;
+    --g-accent-text: #2f7651;
+    --g-accent-text-hover: #245e40;
+    --g-focus: rgba(47, 118, 81, .24);
+}
+
+:root[data-theme="november-10"] {
+    --g-bg: #f5f5f2;
+    --g-surface: #ffffff;
+    --g-surface-soft: #ececea;
+    --g-border: #d8d8d4;
+    --g-text: #171717;
+    --g-muted: #626260;
+    --g-accent: #d8b5b6;
+    --g-accent-hover: #cda2a4;
+    --g-accent-ink: #3a1214;
+    --g-accent-text: #8c3036;
+    --g-accent-text-hover: #6f252a;
+    --g-focus: rgba(140, 48, 54, .24);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root[data-theme="april-23"] {
+        --g-bg: #160d0f;
+        --g-surface: #1d1215;
+        --g-surface-soft: #29191d;
+        --g-border: #42262c;
+        --g-text: #fff1f2;
+        --g-muted: #c4a8ad;
+        --g-accent: #ef9aa1;
+        --g-accent-hover: #f5abb1;
+        --g-accent-ink: #41080e;
+        --g-accent-text: #ffadb4;
+        --g-accent-text-hover: #ffc5ca;
+    }
+
+    :root[data-theme="new-year"] {
+        --g-bg: #0b120e;
+        --g-surface: #101a14;
+        --g-surface-soft: #17241c;
+        --g-border: #293c30;
+        --g-text: #eef7f0;
+        --g-muted: #a5b5aa;
+        --g-accent: #9bc9aa;
+        --g-accent-hover: #acd6b9;
+        --g-accent-ink: #102b1d;
+        --g-accent-text: #a9d8b8;
+        --g-accent-text-hover: #c0e5cb;
+    }
+
+    :root[data-theme="november-10"] {
+        --g-bg: #0c0c0c;
+        --g-surface: #141414;
+        --g-surface-soft: #1d1d1d;
+        --g-border: #303030;
+        --g-text: #f2f2ef;
+        --g-muted: #adadaa;
+        --g-accent: #c9a1a3;
+        --g-accent-hover: #d7b3b5;
+        --g-accent-ink: #321012;
+        --g-accent-text: #dfaaad;
+        --g-accent-text-hover: #ebc1c3;
     }
 }
 
@@ -44,34 +168,6 @@ body {
 body {
     min-height: 100vh;
     min-height: 100dvh;
-}
-
-:root.home-document {
-    --g-bg: #f4f6f7;
-    --g-surface: transparent;
-    --g-surface-soft: rgba(29, 41, 57, .045);
-    --g-border: #cfd6dc;
-    --g-text: #20272d;
-    --g-muted: #7d8992;
-    --g-accent: #5d6f82;
-    --g-accent-hover: #46586b;
-    --g-accent-ink: #ffffff;
-    --g-focus: rgba(93, 111, 130, .22);
-}
-
-@media (prefers-color-scheme: dark) {
-    :root.home-document {
-        --g-bg: #111417;
-        --g-surface: transparent;
-        --g-surface-soft: rgba(225, 232, 237, .05);
-        --g-border: #303840;
-        --g-text: #e8ecef;
-        --g-muted: #87929a;
-        --g-accent: #9baebb;
-        --g-accent-hover: #b1c0ca;
-        --g-accent-ink: #162028;
-        --g-focus: rgba(155, 174, 187, .25);
-    }
 }
 
 .product-home {
@@ -159,7 +255,7 @@ body {
     border: 0 !important;
     border-radius: 0 !important;
     background: transparent !important;
-    color: var(--g-accent) !important;
+    color: var(--g-accent-text) !important;
     box-shadow: none !important;
     font-size: 1.25rem !important;
     font-weight: 350 !important;
@@ -172,7 +268,7 @@ body {
 .url-form-error {
     order: 1;
     margin: .55rem 0 0 !important;
-    color: #a74646;
+    color: var(--g-danger);
     font-size: .72rem;
     line-height: 1.35;
 }
@@ -203,12 +299,12 @@ body {
 }
 
 .minimal-links a {
-    color: var(--g-muted) !important;
+    color: var(--g-accent-text) !important;
     text-decoration: none;
 }
 
 .minimal-links a:hover {
-    color: var(--g-text);
+    color: var(--g-accent-text-hover) !important;
 }
 
 @media (min-width: 700px) {
@@ -244,13 +340,13 @@ body {
 
 .info-header .text-link,
 .info-content a {
-    color: var(--g-muted) !important;
+    color: var(--g-accent-text) !important;
     text-decoration: none !important;
 }
 
 .info-header .text-link:hover,
 .info-content a:hover {
-    color: var(--g-text) !important;
+    color: var(--g-accent-text-hover) !important;
 }
 
 .info-content h1 {
@@ -371,9 +467,9 @@ body {
 }
 
 .form-privacy { margin: .35rem 0 .25rem !important; font-size: .78rem !important; }
-.form-error { margin: 0 0 1rem; color: #b42318; font-size: .86rem; }
+.form-error { margin: 0 0 1rem; color: var(--g-danger); font-size: .86rem; }
 .form-trap { position: absolute !important; left: -10000px !important; width: 1px !important; height: 1px !important; overflow: hidden !important; }
-.contact-return { color: var(--g-text); text-underline-offset: .2em; }
+.contact-return { color: var(--g-accent-text); text-underline-offset: .2em; }
 
 .product-viewer-toolbar,
 .product-viewer-left,
@@ -424,6 +520,64 @@ body {
     text-decoration: none;
     cursor: pointer;
 }
+
+/* Keep legacy result/share components on the same semantic theme contract. */
+.hero-copy,
+.source {
+    color: var(--g-muted) !important;
+}
+
+.button {
+    background: var(--g-accent) !important;
+    color: var(--g-accent-ink) !important;
+}
+
+.button:hover {
+    background: var(--g-accent-hover) !important;
+}
+
+.secondary {
+    border-color: var(--g-border) !important;
+    background: var(--g-surface-soft) !important;
+    color: var(--g-text) !important;
+}
+
+.card,
+.activity,
+.supported,
+.suggest-box {
+    border-color: var(--g-border) !important;
+    background: var(--g-surface) !important;
+    color: var(--g-text) !important;
+}
+
+.activity:hover {
+    background: var(--g-surface-soft) !important;
+}
+
+.site-chip {
+    border-color: var(--g-border) !important;
+    background: var(--g-surface-soft) !important;
+    color: var(--g-text) !important;
+}
+
+.supported summary,
+.suggest-box strong {
+    color: var(--g-text) !important;
+}
+
+.supported-content,
+.home-footer {
+    color: var(--g-muted) !important;
+}
+
+.supported-link,
+.arrow {
+    color: var(--g-accent-text) !important;
+}
+
+.status-ok { color: var(--g-success) !important; }
+.status-error { color: var(--g-danger) !important; }
 
 .share-page {
     width: min(100%, 28rem) !important;
