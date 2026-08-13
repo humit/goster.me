@@ -36,7 +36,7 @@ The isolated origin is a security boundary, not a cosmetic subdomain. Its hostna
 
 ## URL and network controls
 
-All remote fetching must pass through centralized validation. Site adapters must not introduce weaker parallel fetch paths.
+All remote fetching must pass through centralized validation. Site adapters must not introduce weaker parallel fetch paths. Submitted URLs must use a multi-label DNS hostname; IP literals, legacy numeric IPv4 forms, single-label names, and invalid DNS labels are rejected before adapter resolution and are not added to the unsupported-target backlog.
 
 The implementation applies scheme, host, redirect and destination validation and uses explicit source allowlists. Unsupported content does not fall back to arbitrary remote HTML execution.
 

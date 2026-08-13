@@ -46,6 +46,48 @@ class URLValidationTests(unittest.TestCase):
         with self.assertRaises(SecurityValidationError):
             validate_public_url("http://[::1]/admin")
 
+    def test_rejects_legacy_numeric_ipv4_forms(self):
+        values = (
+            "https://234555/",
+            "https://2130706433/",
+            "https://127.1/",
+            "https://0177.0.0.1/",
+            "https://0x7f.0.0.1/",
+        )
+
+        for value in values:
+            with self.subTest(value=value):
+                with self.assertRaises(SecurityValidationError):
+                    validate_public_url(value)
+
+    def test_rejects_single_label_and_invalid_dns_hosts(self):
+        values = (
+            "https://localhost/",
+            "https://server/",
+            "https://bad_host.example/",
+            "https://-bad.example/",
+            "https://bad-.example/",
+            "https://example.123/",
+        )
+
+        for value in values:
+            with self.subTest(value=value):
+                with self.assertRaises(SecurityValidationError):
+                    validate_public_url(value)
+
+    def test_accepts_multilabel_dns_and_idn_hosts(self):
+        values = (
+            "https://example.com/",
+            "https://subdomain.example.com/path",
+            "https://example.com./path",
+            "https://xn--bcher-kva.example/path",
+            "https://bücher.example/path",
+        )
+
+        for value in values:
+            with self.subTest(value=value):
+                self.assertEqual(validate_public_url(value), value)
+
     def test_rejects_control_characters(self):
         with self.assertRaises(SecurityValidationError):
             validate_public_url("https://example.com/a\nb")

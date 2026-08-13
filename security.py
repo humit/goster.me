@@ -6,6 +6,7 @@ import contextvars
 import ipaddress
 import os
 import re
+import socket
 from urllib.error import HTTPError
 from urllib.parse import urljoin, urlparse
 from urllib.request import HTTPRedirectHandler, build_opener
@@ -15,6 +16,9 @@ MAX_URL_LENGTH = int(os.environ.get("GOSTER_MAX_URL_LENGTH", "2048"))
 ALLOWED_URL_SCHEMES = {"http", "https"}
 ALLOWED_URL_PORTS = {80, 443}
 YOUTUBE_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+DNS_LABEL_RE = re.compile(
+    r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$"
+)
 
 _redirect_allowed_hosts: contextvars.ContextVar[frozenset[str]] = (
     contextvars.ContextVar(
@@ -26,6 +30,46 @@ _redirect_allowed_hosts: contextvars.ContextVar[frozenset[str]] = (
 
 class SecurityValidationError(ValueError):
     pass
+
+
+def validate_public_hostname(value: str) -> str:
+    host = value.lower().rstrip(".")
+    if not host:
+        raise SecurityValidationError("URL has no hostname.")
+
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    else:
+        raise SecurityValidationError("IP-address URLs are not allowed.")
+
+    # inet_aton recognizes legacy IPv4 forms that ipaddress deliberately does
+    # not, including single-integer, shortened, octal, and hexadecimal forms.
+    try:
+        socket.inet_aton(host)
+    except OSError:
+        pass
+    else:
+        raise SecurityValidationError("Numeric IP-address URLs are not allowed.")
+
+    try:
+        ascii_host = host.encode("idna").decode("ascii")
+    except UnicodeError as exc:
+        raise SecurityValidationError("URL hostname is not valid DNS.") from exc
+
+    labels = ascii_host.split(".")
+    if (
+        len(ascii_host) > 253
+        or len(labels) < 2
+        or any(not DNS_LABEL_RE.fullmatch(label) for label in labels)
+        or not any(character.isalpha() for character in labels[-1])
+    ):
+        raise SecurityValidationError(
+            "URL hostname must be a fully qualified DNS name."
+        )
+
+    return ascii_host
 
 
 def validate_public_url(value: str) -> str:
@@ -58,14 +102,7 @@ def validate_public_url(value: str) -> str:
     if port is not None and port not in ALLOWED_URL_PORTS:
         raise SecurityValidationError("URL port is not allowed.")
 
-    host = parsed.hostname.lower().rstrip(".")
-
-    try:
-        ipaddress.ip_address(host)
-    except ValueError:
-        pass
-    else:
-        raise SecurityValidationError("IP-address URLs are not allowed.")
+    validate_public_hostname(parsed.hostname)
 
     return url
 

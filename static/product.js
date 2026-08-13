@@ -38,9 +38,15 @@
 
                 try {
                     const parsed = new URL(normalized);
+                    const hostname = parsed.hostname.replace(/\.$/, "");
+                    const labels = hostname.split(".");
+                    const validDnsLabel = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
                     if (
                         (parsed.protocol !== "http:" && parsed.protocol !== "https:")
-                        || !parsed.hostname
+                        || hostname.length > 253
+                        || labels.length < 2
+                        || labels.some(label => !validDnsLabel.test(label))
+                        || !/[a-z]/i.test(labels[labels.length - 1])
                     ) {
                         return null;
                     }
