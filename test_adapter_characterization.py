@@ -8,7 +8,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import adapter_extensions
 import adapters
 from shortlinks import ShortLinkStore
 
@@ -320,12 +319,6 @@ class IlkOkulNativeCharacterizationTests(unittest.TestCase):
         page = html_document(ids=ids, classes=classes)
         with patch.object(adapters, "fetch_html", return_value=(self.URL, page)):
             return adapters.IlkOkulNativeAdapter().resolve(self.URL)
-
-    def test_extension_is_installed_for_production_import_path(self):
-        self.assertEqual(
-            adapters.IlkOkulNativeAdapter.resolve.__module__,
-            adapter_extensions.__name__,
-        )
 
     def test_all_known_families_resolve_to_exact_selector(self):
         for ids, classes, selector in self.FAMILIES:

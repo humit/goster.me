@@ -9,7 +9,6 @@ from http.server import ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 import product_app as app
-import adapter_extensions  # noqa: F401
 
 from sandbox_auth import signed_query, signing_key
 from security import validate_public_origin
