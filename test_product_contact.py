@@ -26,6 +26,8 @@ class ProductContactTests(unittest.TestCase):
         self.assertIn("const normalized = normalizedHttpUrl(raw)", script)
         self.assertIn('parsed.protocol !== "http:"', script)
         self.assertIn('parsed.protocol !== "https:"', script)
+        self.assertIn("labels.length < 2", script)
+        self.assertIn("validDnsLabel", script)
         self.assertIn("Bir bağlantı yapıştırın.", script)
         self.assertIn(
             "Geçerli bir web bağlantısı yapıştırın (http:// veya https:// ile başlamalı).",
@@ -119,6 +121,31 @@ class ProductContactTests(unittest.TestCase):
             handler.do_POST()
 
             record.assert_called_once_with(source_url)
+            self.assertEqual(handler.send_html.call_args.args[0], 400)
+
+    def test_numeric_host_is_rejected_before_unsupported_backlog(self):
+        source_url = "https://234555/"
+        body = urllib.parse.urlencode({"url": source_url}).encode()
+        with (
+            patch.object(product_app, "allow_resolve", return_value=True),
+            patch.object(product_app, "hardened_resolve_url") as resolve,
+            patch.object(product_app.UNSUPPORTED, "record") as record,
+            patch.object(product_app.ANALYTICS, "record"),
+        ):
+            handler = product_app.Handler.__new__(product_app.Handler)
+            handler.path = "/resolve"
+            handler.client_address = ("203.0.113.10", 12345)
+            handler.headers = {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Content-Length": str(len(body)),
+            }
+            handler.rfile = io.BytesIO(body)
+            handler.send_html = Mock()
+
+            handler.do_POST()
+
+            resolve.assert_not_called()
+            record.assert_not_called()
             self.assertEqual(handler.send_html.call_args.args[0], 400)
 
     def test_whitespace_wrapped_unsupported_url_is_normalized_before_backlog(self):
