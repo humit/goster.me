@@ -25,6 +25,7 @@ from gosterme_adapters.providers import (
     YouTubeAdapter as ProviderYouTubeAdapter,
 )
 from gosterme_adapters.sites import (
+    IlkOkulNativeAdapter as SiteIlkOkulNativeAdapter,
     IlkokulAkademiGithubEmbedAdapter as SiteIlkokulAkademiGithubEmbedAdapter,
     IlkokulAkademiNativeAdapter as SiteIlkokulAkademiNativeAdapter,
 )
@@ -314,143 +315,17 @@ class IlkokulAkademiNativeAdapter(SiteIlkokulAkademiNativeAdapter):
         )
 
 
-class IlkOkulNativeAdapter:
-    name = "ilk-okul-native"
+class IlkOkulNativeAdapter(SiteIlkOkulNativeAdapter):
+    """Compatibility facade using the centralized fetch path."""
 
-    SOURCE_HOSTS = {
-        "ilk-okul.com",
-        "www.ilk-okul.com",
-    }
-
-    def match(self, url: str) -> bool:
-        return hostname(url) in self.SOURCE_HOSTS
-
-    def resolve(
-        self,
-        url: str,
-    ) -> ResolvedContent:
-        url = normalized_url(url)
-
-        if not self.match(url):
-            raise NotApplicable()
-
-        final_url, document = fetch_html(
-            url,
-            allowed_hosts=self.SOURCE_HOSTS,
-        )
-
-        parser = NativeGameFingerprintParser()
-        parser.feed(document)
-
-        ids = parser.ids
-        classes = parser.classes
-
-        selector = None
-
-        #
-        # Reading Race
-        #
-        # Observed corpus examples:
-        #   /1912/hizliokuma/okuma-yarisi/...
-        #
-        # Keep the original DOM intact. The game uses multiple sibling
-        # sections for intro, text, timing controls and results, so the
-        # activity effectively occupies the source body.
-        #
-        if {
-            "acilis",
-            "metinon",
-            "start",
-            "basla",
-            "metin",
-            "finish",
-            "sonuc",
-            "result",
-            "kelimesayisi",
-            "okunankelime",
-        }.issubset(ids):
-            selector = "body"
-
-        #
-        # Flying Words
-        #
-        # The whole interactive application is inside #container:
-        # speed selection, reading screen, controls and completion state.
-        #
-        elif {
-            "container",
-            "speed-selector",
-            "reading-speed",
-            "reading-screen",
-            "word",
-            "speed-display",
-            "okuma-ici-butonu",
-            "okuma-sonu-mesaj",
-            "performans-sonucu",
-            "toplam-kelime",
-        }.issubset(ids):
-            selector = "#container"
-
-        #
-        # Türkçesi Varken
-        #
-        # .hero contains both #landingScreen and #gameScreen as well as
-        # game feedback/audio. #gameScreen alone would lose the start UI.
-        #
-        elif (
-            {
-                "landingScreen",
-                "startGameBtn",
-                "gameScreen",
-                "gameCard",
-                "progressText",
-                "scoreText",
-                "correctFlash",
-            }.issubset(ids)
-            and "hero" in classes
-            and "game-shell" in classes
-            and "question-card" in classes
-        ):
-            selector = ".hero"
-
-        #
-        # Yazılanı Değil Rengi
-        #
-        # Intro (#sahne1), game (#sahne2), questions and result table are
-        # siblings directly under body.container. There is no smaller
-        # stable common application root in the source page.
-        #
-        elif (
-            {
-                "sahne1",
-                "basla",
-                "sahne2",
-                "oyunuyenile",
-                "score",
-                "sonuclar",
-            }.issubset(ids)
-            and {
-                "questionblock",
-                "soru",
-                "cevaplar",
-            }.issubset(classes)
-        ):
-            selector = "body.container"
-
-        if selector is None:
-            raise NotApplicable(
-                "No supported İlk-Okul native game found."
-            )
-
-        return ResolvedContent(
-            kind="native-exercise",
-            provider="ilk-okul-native",
-            source_url=url,
-            title=parser.title,
-            content_url=final_url,
-            adapter=self.name,
-            render_mode="isolate",
-            selector=selector,
+    def __init__(self):
+        super().__init__(
+            normalize_url=lambda url: normalized_url(url),
+            hostname=lambda url: hostname(url),
+            fetch_html=lambda url, allowed_hosts: fetch_html(
+                url,
+                allowed_hosts=allowed_hosts,
+            ),
         )
 
 

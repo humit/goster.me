@@ -5,8 +5,10 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-import adapter_extensions  # noqa: F401
 import adapters
+from gosterme_adapters.sites import (
+    IlkOkulNativeAdapter as SiteIlkOkulNativeAdapter,
+)
 
 
 FAST_READING_HTML = """
@@ -27,29 +29,38 @@ FAST_READING_HTML = """
 """
 
 
-class IlkOkulExtensionTests(unittest.TestCase):
-    def test_fast_reading_page_resolves_to_body_isolation(self):
+class IlkOkulAdapterTests(unittest.TestCase):
+    def test_facade_uses_site_owned_implementation(self):
+        self.assertTrue(
+            issubclass(adapters.IlkOkulNativeAdapter, SiteIlkOkulNativeAdapter)
+        )
+
+    def test_fast_reading_uses_centralized_fetch_and_body_isolation(self):
         url = "https://ilk-okul.com/1912/hizliokuma/icerik/7harfli/"
 
         with patch.object(
             adapters,
             "fetch_html",
             return_value=(url, FAST_READING_HTML),
-        ):
+        ) as call:
             item = adapters.IlkOkulNativeAdapter().resolve(url)
 
+        call.assert_called_once_with(
+            url,
+            allowed_hosts=adapters.IlkOkulNativeAdapter.SOURCE_HOSTS,
+        )
         self.assertEqual(item.adapter, "ilk-okul-native")
         self.assertEqual(item.render_mode, "isolate")
         self.assertEqual(item.selector, "body")
 
     def test_partial_fingerprint_remains_not_applicable(self):
         url = "https://ilk-okul.com/example/"
-        html = "<html><body><div id='sahne1'></div></body></html>"
+        document = "<html><body><div id='sahne1'></div></body></html>"
 
         with patch.object(
             adapters,
             "fetch_html",
-            return_value=(url, html),
+            return_value=(url, document),
         ):
             with self.assertRaises(adapters.NotApplicable):
                 adapters.IlkOkulNativeAdapter().resolve(url)

@@ -52,7 +52,7 @@ Ayrı origin kozmetik bir subdomain değil, güvenlik sınırıdır. Hostname te
 
 ## URL ve network kontrolleri
 
-Tüm remote fetch işlemleri merkezi doğrulamadan geçmelidir. Site adapter'ları daha zayıf paralel fetch yolları oluşturmamalıdır.
+Tüm remote fetch işlemleri merkezi doğrulamadan geçmelidir. Site adapter'ları daha zayıf paralel fetch yolları oluşturmamalıdır. Gönderilen URL'ler multi-label bir DNS hostname kullanmalıdır; IP literal'ları, legacy numeric IPv4 biçimleri, single-label adlar ve geçersiz DNS label'ları adapter resolution'dan önce reddedilir ve unsupported-target backlog'una eklenmez.
 
 Uygulama scheme, host, redirect ve hedef doğrulaması yapar ve explicit source allowlist kullanır. Desteklenmeyen içerik arbitrary remote HTML execution'a fallback etmez.
 
