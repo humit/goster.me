@@ -77,7 +77,7 @@
     bottom: calc(100% + .5rem);
     width: min(19rem, calc(100vw - 1.4rem));
     padding: .45rem;
-    border: 1px solid color-mix(in srgb, var(--g-accent-ink) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--g-accent-ink) 28%, transparent);
     border-radius: .85rem;
     background: var(--g-viewer-panel);
     color: var(--g-viewer-text);
@@ -101,7 +101,7 @@
     justify-content: center;
     box-sizing: border-box;
     padding: 0 .7rem;
-    border: 0;
+    border: 1px solid var(--g-viewer-control-border);
     border-radius: .6rem;
     background: var(--g-viewer-control);
     color: var(--g-viewer-text);

@@ -36,7 +36,8 @@ The canonical tokens are defined in `static/product.css`:
   `--g-accent-text`, `--g-accent-text-hover`, `--g-focus`;
 - state: `--g-danger`, `--g-success`;
 - viewer overlay: `--g-viewer-panel`, `--g-viewer-control`,
-  `--g-viewer-control-hover`, `--g-viewer-text`, `--g-viewer-muted`.
+  `--g-viewer-control-hover`, `--g-viewer-control-border`,
+  `--g-viewer-text`, `--g-viewer-muted`.
 
 Legacy variable aliases remain temporarily because the older renderer is still
 loaded before the product stylesheet. New components must use only `--g-*`

@@ -15,8 +15,9 @@
     --g-danger: #a74646;
     --g-success: #28754d;
     --g-viewer-panel: var(--g-accent);
-    --g-viewer-control: color-mix(in srgb, var(--g-accent-ink) 4%, transparent);
-    --g-viewer-control-hover: color-mix(in srgb, var(--g-accent-ink) 8%, transparent);
+    --g-viewer-control: color-mix(in srgb, var(--g-accent-ink) 9%, transparent);
+    --g-viewer-control-hover: color-mix(in srgb, var(--g-accent-ink) 15%, transparent);
+    --g-viewer-control-border: color-mix(in srgb, var(--g-accent-ink) 24%, transparent);
     --g-viewer-text: var(--g-accent-ink);
     --g-viewer-muted: var(--g-accent-ink);
     --g-radius-sm: 7px;
