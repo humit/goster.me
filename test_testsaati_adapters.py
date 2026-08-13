@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 import adapters
+import gosterme_adapters
 from gosterme_adapters.sites import (
     TestSaatiZombifyAdapter as SiteTestSaatiZombifyAdapter,
 )
@@ -81,6 +82,42 @@ class TestSaatiAdapterTests(unittest.TestCase):
                 ):
                     with self.assertRaises(adapters.NotApplicable):
                         adapters.TestSaatiZombifyAdapter().resolve(self.URL)
+
+    def test_context_path_uses_resolution_fetch(self):
+        document = (
+            "<html><head><title>Zombify</title></head><body>"
+            '<div class="zf-quiz zf-trivia_quiz"></div>'
+            "</body></html>"
+        )
+        calls = []
+
+        def fetch_html(source_url, allowed_hosts):
+            calls.append((source_url, allowed_hosts))
+            return self.URL, document
+
+        context = gosterme_adapters.ResolutionContext(
+            normalized_url=self.URL,
+            hostname=adapters.hostname(self.URL),
+            fetch_html=fetch_html,
+        )
+
+        with patch.object(
+            adapters,
+            "fetch_html",
+            side_effect=AssertionError("legacy fetch path used"),
+        ):
+            item = gosterme_adapters.AdapterRegistry(
+                [adapters.TestSaatiZombifyAdapter()]
+            ).resolve_context(context)
+
+        self.assertEqual(item.adapter, "testsaati-zombify")
+        self.assertEqual(item.provider, "zombify")
+        self.assertEqual(item.render_mode, "isolate")
+        self.assertEqual(item.selector, ".zf-quiz")
+        self.assertEqual(
+            calls,
+            [(self.URL, adapters.TestSaatiZombifyAdapter.SOURCE_HOSTS)],
+        )
 
 
 if __name__ == "__main__":
