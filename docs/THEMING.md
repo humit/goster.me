@@ -30,6 +30,10 @@ First-party CSS and JavaScript URLs include a content-derived version. This
 keeps browser caches useful while ensuring a changed theme or viewer stylesheet
 is fetched immediately without adding another request.
 
+Viewer controls provide an `rgba()` baseline for older WebKit releases and
+enhance theme-derived color mixing only when the browser reports support. Core
+action boundaries must not depend on `color-mix()` being available.
+
 ## Token layers
 
 The canonical tokens are defined in `static/product.css`:

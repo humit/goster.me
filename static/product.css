@@ -15,9 +15,9 @@
     --g-danger: #a74646;
     --g-success: #28754d;
     --g-viewer-panel: var(--g-accent);
-    --g-viewer-control: color-mix(in srgb, var(--g-accent-ink) 9%, transparent);
-    --g-viewer-control-hover: color-mix(in srgb, var(--g-accent-ink) 15%, transparent);
-    --g-viewer-control-border: color-mix(in srgb, var(--g-accent-ink) 24%, transparent);
+    --g-viewer-control: rgba(0, 0, 0, .09);
+    --g-viewer-control-hover: rgba(0, 0, 0, .15);
+    --g-viewer-control-border: rgba(0, 0, 0, .24);
     --g-viewer-text: var(--g-accent-ink);
     --g-viewer-muted: var(--g-accent-ink);
     --g-radius-sm: 7px;
@@ -37,6 +37,14 @@
     --accent-strong: var(--g-accent);
     --success: var(--g-success);
     --danger: var(--g-danger);
+}
+
+@supports (color: color-mix(in srgb, black 50%, transparent)) {
+    :root {
+        --g-viewer-control: color-mix(in srgb, var(--g-accent-ink) 9%, transparent);
+        --g-viewer-control-hover: color-mix(in srgb, var(--g-accent-ink) 15%, transparent);
+        --g-viewer-control-border: color-mix(in srgb, var(--g-accent-ink) 24%, transparent);
+    }
 }
 
 @media (prefers-color-scheme: dark) {

@@ -172,9 +172,22 @@ class ThemeContractTests(unittest.TestCase):
         self.assertIn("--g-viewer-panel: var(--g-accent);", product_styles)
         self.assertIn("--g-viewer-text: var(--g-accent-ink);", product_styles)
         self.assertIn("--g-viewer-muted: var(--g-accent-ink);", product_styles)
+        self.assertIn("--g-viewer-control: rgba(0, 0, 0, .09);", product_styles)
         self.assertIn(
             "--g-viewer-control-border: color-mix(",
             product_styles,
+        )
+        self.assertIn(
+            "@supports (color: color-mix(",
+            product_styles,
+        )
+        self.assertIn(
+            "border: 1px solid rgba(0, 0, 0, .28);",
+            viewer_styles,
+        )
+        self.assertIn(
+            "@supports (color: color-mix(",
+            viewer_styles,
         )
         self.assertIn(
             "background: var(--g-viewer-control-hover);",
