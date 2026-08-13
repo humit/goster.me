@@ -31,6 +31,7 @@ class AdapterRegistry:
         return self._resolve(
             context.normalized_url,
             unsupported_hostname=lambda: context.hostname,
+            context=context,
         )
 
     def _resolve(
@@ -38,6 +39,7 @@ class AdapterRegistry:
         url: str,
         *,
         unsupported_hostname: Callable[[], str],
+        context: ResolutionContext | None = None,
     ) -> ResolvedContent:
         matched = False
         notes: list[str] = []
@@ -49,6 +51,13 @@ class AdapterRegistry:
             matched = True
 
             try:
+                resolve_context = getattr(
+                    adapter,
+                    "resolve_context",
+                    None,
+                )
+                if context is not None and callable(resolve_context):
+                    return resolve_context(context)
                 return adapter.resolve(url)
             except NotApplicable as exc:
                 if str(exc):
