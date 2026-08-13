@@ -1,5 +1,6 @@
 """Stable adapter contracts and deterministic registry primitives."""
 
+from .context import ResolutionContext
 from .registry import AdapterRegistry
 from .types import (
     AdapterError,
@@ -15,6 +16,7 @@ __all__ = [
     "AdapterRegistry",
     "ContentAdapter",
     "NotApplicable",
+    "ResolutionContext",
     "ResolvedContent",
     "ResolveError",
     "UnsupportedURL",

@@ -14,6 +14,7 @@ from gosterme_adapters import (
     AdapterRegistry,
     ContentAdapter,
     NotApplicable,
+    ResolutionContext,
     ResolvedContent,
     ResolveError,
     UnsupportedURL,
