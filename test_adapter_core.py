@@ -18,6 +18,7 @@ class CompatibilityFacadeTests(unittest.TestCase):
             "ResolveError",
             "NotApplicable",
             "ContentAdapter",
+            "ResolutionContext",
         ):
             self.assertIs(getattr(adapters, name), getattr(gosterme_adapters, name))
 
@@ -51,6 +52,45 @@ class CompatibilityFacadeTests(unittest.TestCase):
 
         normalize.assert_called_once_with("https://example.com/raw")
         self.assertEqual(fixture.resolved_url, "https://example.com/normalized")
+
+
+class ResolutionContextTests(unittest.TestCase):
+    def test_context_holds_per_attempt_resolution_data(self):
+        context = gosterme_adapters.ResolutionContext(
+            normalized_url="https://example.com/activity",
+            hostname="example.com",
+        )
+
+        self.assertEqual(context.normalized_url, "https://example.com/activity")
+        self.assertEqual(context.hostname, "example.com")
+        self.assertIsNone(context.final_url)
+        self.assertIsNone(context.document)
+        self.assertEqual(context.parser_results, {})
+
+        context.final_url = "https://www.example.com/activity"
+        context.document = "<html></html>"
+        context.parser_results["activity"] = {"selector": "#game"}
+
+        self.assertEqual(context.final_url, "https://www.example.com/activity")
+        self.assertEqual(context.document, "<html></html>")
+        self.assertEqual(
+            context.parser_results,
+            {"activity": {"selector": "#game"}},
+        )
+
+    def test_parser_results_are_isolated_between_attempts(self):
+        first = gosterme_adapters.ResolutionContext(
+            normalized_url="https://example.com/first",
+            hostname="example.com",
+        )
+        second = gosterme_adapters.ResolutionContext(
+            normalized_url="https://example.com/second",
+            hostname="example.com",
+        )
+
+        first.parser_results["fixture"] = object()
+
+        self.assertEqual(second.parser_results, {})
 
 
 class AdapterRegistryTests(unittest.TestCase):
