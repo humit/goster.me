@@ -26,6 +26,10 @@ The optional presets are intentionally restrained color treatments. They add
 no images, remote fonts, scripts, requests, animation, layout changes, or
 provider privileges.
 
+First-party CSS and JavaScript URLs include a content-derived version. This
+keeps browser caches useful while ensuring a changed theme or viewer stylesheet
+is fetched immediately without adding another request.
+
 ## Token layers
 
 The canonical tokens are defined in `static/product.css`:

@@ -105,7 +105,8 @@ class PlatformSandboxTests(unittest.TestCase):
         self.assertIn("https://s.goster.me/v/abc346?exp=", page)
         self.assertIn("&amp;sig=", page)
         self.assertIn(
-            '<link rel="stylesheet" href="/static/viewer-controls.css">',
+            '<link rel="stylesheet" '
+            f'href="{platform_app.app.static_asset_url("viewer-controls.css")}">',
             page,
         )
         self.assertIn(

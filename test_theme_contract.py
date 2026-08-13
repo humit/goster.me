@@ -137,6 +137,32 @@ class ThemeContractTests(unittest.TestCase):
                     "text/css; charset=utf-8",
                 )
 
+    def test_static_asset_urls_are_content_versioned(self):
+        page = product_app.product_document(
+            "Example",
+            "<main>Example</main>",
+            viewer_controls=True,
+        )
+
+        for name in product_app.STATIC_ASSET_NAMES:
+            with self.subTest(name=name):
+                url = product_app.static_asset_url(name)
+                prefix = f"/static/{name}?v="
+                self.assertTrue(url.startswith(prefix))
+                version = url.removeprefix(prefix)
+                self.assertEqual(len(version), 12)
+                int(version, 16)
+                self.assertIn(url, page)
+
+    def test_versioned_static_asset_route_ignores_hash_query(self):
+        handler = product_app.Handler.__new__(product_app.Handler)
+        handler.path = product_app.static_asset_url("viewer-controls.css")
+
+        with patch.object(handler, "send_static", return_value=True) as send:
+            handler.do_GET()
+
+        send.assert_called_once_with("viewer-controls.css")
+
     def test_viewer_panel_uses_the_active_accent_palette(self):
         product_styles = (product_app.STATIC_DIR / "product.css").read_text()
         viewer_styles = (

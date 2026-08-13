@@ -53,6 +53,15 @@ FEEDBACK = FeedbackStore(STORE.path)
 UNSUPPORTED = UnsupportedTargetStore(STORE.path)
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "static"
+STATIC_ASSET_NAMES = (
+    "product.css",
+    "viewer-controls.css",
+    "product.js",
+)
+STATIC_ASSET_VERSIONS = {
+    name: hashlib.sha256((STATIC_DIR / name).read_bytes()).hexdigest()[:12]
+    for name in STATIC_ASSET_NAMES
+}
 PUBLIC_ORIGIN = public_origin()
 MAX_POST_BYTES = int(os.environ.get("GOSTER_MAX_POST_BYTES", "4096"))
 RESOLVE_RATE_PER_MINUTE = int(
@@ -92,6 +101,11 @@ _ORIGINAL_RESOLVE_URL = legacy.resolve_url
 
 def escape(value: str | None) -> str:
     return html.escape(value or "", quote=True)
+
+
+def static_asset_url(name: str) -> str:
+    """Return a content-versioned URL for an allowlisted static asset."""
+    return f"/static/{name}?v={STATIC_ASSET_VERSIONS[name]}"
 
 
 def active_theme() -> str:
@@ -296,7 +310,7 @@ def product_document(
     optional_stylesheets = ""
     if viewer_controls:
         optional_stylesheets += (
-            '<link rel="stylesheet" href="/static/viewer-controls.css">\n'
+            f'<link rel="stylesheet" href="{static_asset_url("viewer-controls.css")}">\n'
         )
 
     return f"""<!doctype html>
@@ -310,11 +324,11 @@ def product_document(
 {f'<meta name="description" content="{escape(description)}">' if description else ''}
 {f'<link rel="canonical" href="{escape(canonical_url(canonical_path))}">' if canonical_path else ''}
 {legacy.BASE_STYLE}
-<link rel="stylesheet" href="/static/product.css">
+<link rel="stylesheet" href="{static_asset_url("product.css")}">
 {optional_stylesheets}</head>
 <body>
 {body}
-<script src="/static/product.js" defer></script>
+<script src="{static_asset_url("product.js")}" defer></script>
 </body>
 </html>
 """
