@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from collections import Counter
+from pathlib import Path
+
+
+CACHE_VERSION = 1
+RESOLVED_FIELDS = (
+    "provider",
+    "adapter",
+    "kind",
+    "render_mode",
+    "selector",
+    "content_url",
+)
+
+
+def load_cache(path: Path) -> dict[str, dict]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise ValueError(f"could not read {path}: {exc}") from exc
+
+    if data.get("version") != CACHE_VERSION:
+        raise ValueError(f"unsupported cache version in {path}")
+
+    records = data.get("urls")
+    if not isinstance(records, dict) or not all(
+        isinstance(url, str) and isinstance(record, dict)
+        for url, record in records.items()
+    ):
+        raise ValueError(f"invalid URL records in {path}")
+
+    return records
+
+
+def counts(records: dict[str, dict], field: str) -> dict[str, int]:
+    values = Counter(
+        str(record[field])
+        for record in records.values()
+        if record.get(field)
+    )
+    return dict(sorted(values.items()))
+
+
+def deltas(before: dict[str, int], after: dict[str, int]) -> dict[str, int]:
+    return {
+        key: after.get(key, 0) - before.get(key, 0)
+        for key in sorted(set(before) | set(after))
+        if after.get(key, 0) != before.get(key, 0)
+    }
+
+
+def compare(baseline: dict[str, dict], current: dict[str, dict]) -> dict:
+    transitions = Counter()
+    improvements = 0
+    regressions = 0
+    changed_output = 0
+    shared = sorted(set(baseline) & set(current))
+
+    for url in shared:
+        old = baseline[url]
+        new = current[url]
+        old_status = str(old.get("status") or "unknown")
+        new_status = str(new.get("status") or "unknown")
+
+        if old_status != new_status:
+            transitions[f"{old_status} -> {new_status}"] += 1
+        if old_status != "resolved" and new_status == "resolved":
+            improvements += 1
+        if old_status == "resolved" and new_status != "resolved":
+            regressions += 1
+        if old_status == new_status == "resolved" and any(
+            old.get(field) != new.get(field) for field in RESOLVED_FIELDS
+        ):
+            changed_output += 1
+
+    baseline_status = counts(baseline, "status")
+    current_status = counts(current, "status")
+    dimensions = {}
+
+    for field in ("provider", "adapter", "kind"):
+        before = counts(baseline, field)
+        after = counts(current, field)
+        dimensions[field] = {
+            "baseline": before,
+            "current": after,
+            "delta": deltas(before, after),
+        }
+
+    return {
+        "schema_version": 1,
+        "baseline_urls": len(baseline),
+        "current_urls": len(current),
+        "shared_urls": len(shared),
+        "added_urls": len(set(current) - set(baseline)),
+        "removed_urls": len(set(baseline) - set(current)),
+        "status": {
+            "baseline": baseline_status,
+            "current": current_status,
+            "delta": deltas(baseline_status, current_status),
+        },
+        "transitions": dict(sorted(transitions.items())),
+        "improvements": improvements,
+        "regressions": regressions,
+        "changed_resolved_output": changed_output,
+        "dimensions": dimensions,
+    }
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Compare two analyze-corpus cache files without exposing corpus URLs."
+        )
+    )
+    parser.add_argument("baseline", type=Path)
+    parser.add_argument("current", type=Path)
+    parser.add_argument(
+        "--fail-on-regression",
+        action="store_true",
+        help="Exit with status 1 when a resolved shared URL becomes unresolved.",
+    )
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    try:
+        result = compare(load_cache(args.baseline), load_cache(args.current))
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+
+    print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+    return 1 if args.fail_on_regression and result["regressions"] else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
