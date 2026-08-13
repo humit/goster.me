@@ -14,10 +14,11 @@
     --g-focus: rgba(68, 145, 134, .24);
     --g-danger: #a74646;
     --g-success: #28754d;
-    --g-viewer-panel: rgba(12, 14, 18, .96);
-    --g-viewer-control: rgba(255, 255, 255, .09);
-    --g-viewer-text: #ffffff;
-    --g-viewer-muted: rgba(255, 255, 255, .76);
+    --g-viewer-panel: var(--g-accent);
+    --g-viewer-control: color-mix(in srgb, var(--g-accent-ink) 4%, transparent);
+    --g-viewer-control-hover: color-mix(in srgb, var(--g-accent-ink) 8%, transparent);
+    --g-viewer-text: var(--g-accent-ink);
+    --g-viewer-muted: var(--g-accent-ink);
     --g-radius-sm: 7px;
     --g-radius-md: 8px;
     --g-radius-lg: 10px;

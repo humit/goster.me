@@ -137,6 +137,22 @@ class ThemeContractTests(unittest.TestCase):
                     "text/css; charset=utf-8",
                 )
 
+    def test_viewer_panel_uses_the_active_accent_palette(self):
+        product_styles = (product_app.STATIC_DIR / "product.css").read_text()
+        viewer_styles = (
+            product_app.STATIC_DIR / "viewer-controls.css"
+        ).read_text()
+
+        self.assertIn("--g-viewer-panel: var(--g-accent);", product_styles)
+        self.assertIn("--g-viewer-text: var(--g-accent-ink);", product_styles)
+        self.assertIn("--g-viewer-muted: var(--g-accent-ink);", product_styles)
+        self.assertIn(
+            "background: var(--g-viewer-control-hover);",
+            viewer_styles,
+        )
+        self.assertNotIn("rgba(12, 14, 18, .96)", product_styles)
+        self.assertNotIn("rgba(255, 255, 255, .14)", viewer_styles)
+
 
 if __name__ == "__main__":
     unittest.main()
