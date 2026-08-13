@@ -126,6 +126,20 @@ class ResolutionContextTests(unittest.TestCase):
 
         self.assertEqual(second.parser_results, {})
 
+    def test_candidate_traces_are_isolated_between_attempts(self):
+        first = gosterme_adapters.ResolutionContext(
+            normalized_url="https://example.com/first",
+            hostname="example.com",
+        )
+        second = gosterme_adapters.ResolutionContext(
+            normalized_url="https://example.com/second",
+            hostname="example.com",
+        )
+
+        first.trace_candidate("fixture", "not-matched")
+
+        self.assertEqual(second.candidate_trace, [])
+
     def test_parser_result_factory_runs_once_per_key(self):
         context = gosterme_adapters.ResolutionContext(
             normalized_url="https://example.com/activity",
@@ -320,6 +334,80 @@ class AdapterRegistryTests(unittest.TestCase):
 
         self.assertIs(registry.resolve_context(context), result)
         self.assertEqual(calls, [("context", context)])
+
+    def test_context_trace_follows_registry_order_and_outcomes(self):
+        result = adapters.ResolvedContent(
+            kind="embed",
+            provider="fixture",
+            source_url="https://example.com/activity",
+        )
+
+        class Candidate:
+            def __init__(self, name, matches, resolved=None):
+                self.name = name
+                self.matches = matches
+                self.resolved = resolved
+
+            def match(self, url):
+                return self.matches
+
+            def resolve(self, url):
+                if self.resolved is None:
+                    raise adapters.NotApplicable("fixture")
+                return self.resolved
+
+        context = gosterme_adapters.ResolutionContext(
+            normalized_url="https://example.com/activity",
+            hostname="example.com",
+        )
+        registry = gosterme_adapters.AdapterRegistry(
+            [
+                Candidate("first", False),
+                Candidate("second", True),
+                Candidate("third", True, result),
+            ]
+        )
+
+        self.assertIs(registry.resolve_context(context), result)
+        self.assertEqual(
+            [
+                (entry.adapter, entry.outcome)
+                for entry in context.candidate_trace
+            ],
+            [
+                ("first", "not-matched"),
+                ("second", "not-applicable"),
+                ("third", "resolved"),
+            ],
+        )
+
+    def test_context_trace_records_and_reraises_adapter_errors(self):
+        class Candidate:
+            name = "fixture"
+
+            def match(self, url):
+                return True
+
+            def resolve(self, url):
+                raise ValueError("fixture error")
+
+        context = gosterme_adapters.ResolutionContext(
+            normalized_url="https://example.com/activity",
+            hostname="example.com",
+        )
+
+        with self.assertRaisesRegex(ValueError, "fixture error"):
+            gosterme_adapters.AdapterRegistry(
+                [Candidate()]
+            ).resolve_context(context)
+
+        self.assertEqual(
+            [
+                (entry.adapter, entry.outcome)
+                for entry in context.candidate_trace
+            ],
+            [("fixture", "error")],
+        )
 
 
 if __name__ == "__main__":
