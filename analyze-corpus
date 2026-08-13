@@ -25,7 +25,7 @@ URL_RE = re.compile(r'https?://[^\s<>"]+')
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_CACHE = SCRIPT_DIR / ".cache" / "analyze-corpus.json"
 
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 
 
 def utc_now() -> str:
@@ -61,6 +61,13 @@ def domain_matches(
         normalized_domain(host(url))
         == normalized_domain(requested_domain)
     )
+
+
+def excluded_by_domain(
+    url: str,
+    excluded_domains: set[str],
+) -> bool:
+    return normalized_domain(host(url)) in excluded_domains
 
 
 def extract_urls(path: Path) -> list[str]:
@@ -163,6 +170,9 @@ def resolve_record(url: str) -> dict:
             "kind": None,
             "render_mode": None,
             "selector": None,
+            "content_url": None,
+            "content_urls": [],
+            "title": None,
             "checked_at": utc_now(),
         }
 
@@ -175,6 +185,9 @@ def resolve_record(url: str) -> dict:
             "kind": None,
             "render_mode": None,
             "selector": None,
+            "content_url": None,
+            "content_urls": [],
+            "title": None,
             "checked_at": utc_now(),
         }
 
@@ -187,6 +200,7 @@ def resolve_record(url: str) -> dict:
         "render_mode": result.render_mode,
         "selector": result.selector,
         "content_url": result.content_url,
+        "content_urls": list(result.content_urls),
         "title": result.title,
         "checked_at": utc_now(),
     }
@@ -324,6 +338,16 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--exclude-domain",
+        action="append",
+        default=[],
+        help=(
+            "Exclude this domain from analysis. Repeat for multiple domains; "
+            "www and bare forms are treated as equivalent."
+        ),
+    )
+
+    parser.add_argument(
         "--cache",
         type=Path,
         default=DEFAULT_CACHE,
@@ -360,6 +384,15 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
+    excluded_domains = {
+        normalized_domain(value)
+        for value in args.exclude_domain
+        if normalized_domain(value)
+    }
+
+    if any(not normalized_domain(value) for value in args.exclude_domain):
+        raise SystemExit("ERROR: excluded domain must not be empty")
+
     if args.reset_cache:
         cache = empty_cache()
     else:
@@ -368,6 +401,7 @@ def main() -> None:
     cached_urls = cache["urls"]
 
     urls = []
+    excluded = 0
 
     for path in args.files:
         found = extract_urls(path)
@@ -377,7 +411,13 @@ def main() -> None:
             file=sys.stderr,
         )
 
-        urls.extend(found)
+        active = [
+            url
+            for url in found
+            if not excluded_by_domain(url, excluded_domains)
+        ]
+        excluded += len(found) - len(active)
+        urls.extend(active)
 
     unique_urls = list(
         dict.fromkeys(urls)
@@ -556,6 +596,7 @@ def main() -> None:
     print(
         f"URLs total        : {len(urls)}"
     )
+    print(f"URLs excluded     : {excluded}")
     print(
         f"URLs unique       : {len(unique_urls)}"
     )

@@ -9,7 +9,7 @@ from collections import Counter
 from pathlib import Path
 
 
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 RESOLVED_FIELDS = (
     "provider",
     "adapter",
@@ -17,6 +17,8 @@ RESOLVED_FIELDS = (
     "render_mode",
     "selector",
     "content_url",
+    "content_urls",
+    "title",
 )
 
 
@@ -61,6 +63,7 @@ def compare(baseline: dict[str, dict], current: dict[str, dict]) -> dict:
     improvements = 0
     regressions = 0
     changed_output = 0
+    changed_fields = Counter()
     shared = sorted(set(baseline) & set(current))
 
     for url in shared:
@@ -75,10 +78,15 @@ def compare(baseline: dict[str, dict], current: dict[str, dict]) -> dict:
             improvements += 1
         if old_status == "resolved" and new_status != "resolved":
             regressions += 1
-        if old_status == new_status == "resolved" and any(
-            old.get(field) != new.get(field) for field in RESOLVED_FIELDS
-        ):
-            changed_output += 1
+        if old_status == new_status == "resolved":
+            fields = [
+                field
+                for field in RESOLVED_FIELDS
+                if old.get(field) != new.get(field)
+            ]
+            if fields:
+                changed_output += 1
+                changed_fields.update(fields)
 
     baseline_status = counts(baseline, "status")
     current_status = counts(current, "status")
@@ -93,8 +101,8 @@ def compare(baseline: dict[str, dict], current: dict[str, dict]) -> dict:
             "delta": deltas(before, after),
         }
 
-    return {
-        "schema_version": 1,
+    result = {
+        "schema_version": 2,
         "baseline_urls": len(baseline),
         "current_urls": len(current),
         "shared_urls": len(shared),
@@ -109,8 +117,18 @@ def compare(baseline: dict[str, dict], current: dict[str, dict]) -> dict:
         "improvements": improvements,
         "regressions": regressions,
         "changed_resolved_output": changed_output,
+        "changed_resolved_fields": dict(sorted(changed_fields.items())),
         "dimensions": dimensions,
     }
+    result["parity"] = not any(
+        (
+            result["added_urls"],
+            result["removed_urls"],
+            result["transitions"],
+            result["changed_resolved_output"],
+        )
+    )
+    return result
 
 
 def parse_args() -> argparse.Namespace:
@@ -126,6 +144,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Exit with status 1 when a resolved shared URL becomes unresolved.",
     )
+    parser.add_argument(
+        "--require-parity",
+        action="store_true",
+        help=(
+            "Exit with status 1 when URL sets, statuses, or resolved outputs "
+            "differ."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -138,7 +164,11 @@ def main() -> int:
         return 2
 
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
-    return 1 if args.fail_on_regression and result["regressions"] else 0
+    if args.fail_on_regression and result["regressions"]:
+        return 1
+    if args.require_parity and not result["parity"]:
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
