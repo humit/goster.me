@@ -182,11 +182,14 @@ Yeni provider'lar gerçek kullanımda görülen URL'lere göre eklenir.
 
 `analyze-corpus`
 : WhatsApp/chat URL corpus'unu bütün adapter'larla analiz eder.
+Geçici olarak kapsam dışı bırakılan bir domain, tekrar edilebilir
+`--exclude-domain DOMAIN` seçeneğiyle fetch ve sonuçlardan çıkarılabilir.
 
 `compare-corpus BASELINE.json CURRENT.json`
 : İki analyzer cache'ini URL'leri yazdırmadan deterministik JSON özetiyle
 karşılaştırır. `--fail-on-regression`, çözülmüş bir URL artık çözülmüyorsa gate'i
-başarısız yapar.
+başarısız yapar. `--require-parity`, URL kümesi, durum veya çözülmüş adapter çıktısı
+değiştiğinde gate'i başarısız yapar.
 
 `docs/CAPACITY_SCALABILITY_RESILIENCE.md`
 : Sunucu darboğazları, SPoF'lar ve dikey/yatay ölçekleme sözleşmesi.

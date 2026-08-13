@@ -182,6 +182,14 @@ New providers are added based on URLs observed in real use.
 
 `analyze-corpus`
 : Analyze a WhatsApp/chat URL corpus against all adapters.
+Temporarily deferred domains can be removed from fetches and results with the
+repeatable `--exclude-domain DOMAIN` option.
+
+`compare-corpus BASELINE.json CURRENT.json`
+: Compare two analyzer caches with a deterministic JSON summary that does not
+expose corpus URLs. `--fail-on-regression` fails when a previously resolved URL
+no longer resolves. `--require-parity` fails when the URL set, status, or resolved
+adapter output changes.
 
 ## Test
 
