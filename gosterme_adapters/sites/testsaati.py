@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from ..context import ResolutionContext
 from ..html import BasicHTMLParser
 from ..types import NotApplicable, ResolvedContent
 
@@ -60,7 +61,31 @@ class TestSaatiZombifyAdapter:
         if not self.match(url):
             raise NotApplicable()
 
-        final_url, document = self._fetch_html(url, self.SOURCE_HOSTS)
+        return self._resolve_document(
+            url,
+            *self._fetch_html(url, self.SOURCE_HOSTS),
+        )
+
+    def resolve_context(
+        self,
+        context: ResolutionContext,
+    ) -> ResolvedContent:
+        url = context.normalized_url
+
+        if not self.match(url):
+            raise NotApplicable()
+
+        return self._resolve_document(
+            url,
+            *context.fetch(self.SOURCE_HOSTS),
+        )
+
+    def _resolve_document(
+        self,
+        url: str,
+        final_url: str,
+        document: str,
+    ) -> ResolvedContent:
         parser = ZombifyFingerprintParser()
         parser.feed(document)
 
