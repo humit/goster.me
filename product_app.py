@@ -270,6 +270,7 @@ def product_document(
     *,
     description: str | None = None,
     canonical_path: str | None = None,
+    document_class: str | None = None,
 ) -> str:
     """Shared HTML shell.
 
@@ -277,7 +278,7 @@ def product_document(
     so contributors can work on UI without editing the Python renderer.
     """
     return f"""<!doctype html>
-<html lang="tr">
+<html lang="tr"{f' class="{escape(document_class)}"' if document_class else ''}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -326,7 +327,12 @@ def render_home(campaign: str | None = None) -> str:
                 required
                 autofocus
             >
-            <button class="url-submit" type="submit">Göster</button>
+            <button
+                class="url-submit"
+                type="submit"
+                aria-label="Bağlantıyı aç"
+                title="Bağlantıyı aç"
+            ><span aria-hidden="true">→</span></button>
         </form>
 
         <nav class="minimal-links" aria-label="Bilgi">
@@ -338,6 +344,7 @@ def render_home(campaign: str | None = None) -> str:
 """,
         description=PUBLIC_META_DESCRIPTION,
         canonical_path="/",
+        document_class="home-document",
     )
 
 
