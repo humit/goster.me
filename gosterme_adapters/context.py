@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import TypeVar, cast
 from urllib.parse import urlparse
 
 from .types import ResolveError
 
 
 FetchHTML = Callable[[str, set[str]], tuple[str, str]]
+ParserResult = TypeVar("ParserResult")
 
 
 @dataclass
@@ -26,6 +28,20 @@ class ResolutionContext:
     final_url: str | None = None
     document: str | None = None
     parser_results: dict[str, object] = field(default_factory=dict)
+
+    def get_parser_result(
+        self,
+        key: str,
+        factory: Callable[[], ParserResult],
+    ) -> ParserResult:
+        """Return one successful parser result per key and resolution attempt."""
+
+        if key in self.parser_results:
+            return cast(ParserResult, self.parser_results[key])
+
+        result = factory()
+        self.parser_results[key] = result
+        return result
 
     def fetch(self, allowed_hosts: set[str]) -> tuple[str, str]:
         """Fetch once and revalidate cached results for each adapter allowlist."""
