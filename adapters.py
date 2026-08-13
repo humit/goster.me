@@ -340,6 +340,10 @@ def resolve_url(
     context = ResolutionContext(
         normalized_url=url,
         hostname=hostname(url),
+        fetch_html=lambda url, allowed_hosts: fetch_html(
+            url,
+            allowed_hosts=allowed_hosts,
+        ),
     )
     return AdapterRegistry(ADAPTERS).resolve_context(context)
 
