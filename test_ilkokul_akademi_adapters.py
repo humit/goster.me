@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 import adapters
+import gosterme_adapters
 from gosterme_adapters.html import NativeGameFingerprintParser
 from gosterme_adapters.sites import (
     IlkokulAkademiGithubEmbedAdapter as SiteGithubEmbedAdapter,
@@ -73,6 +74,46 @@ class IlkokulAkademiOwnershipTests(unittest.TestCase):
         )
         self.assertEqual(item.selector, "#math-game-container")
         self.assertEqual(item.render_mode, "isolate")
+
+    def test_context_fetch_is_shared_between_embed_and_native_adapters(self):
+        url = "https://ilkokulakademi.com/activity"
+        document = """
+            <html><head><title>Fixture</title></head><body>
+              <main id="math-game-container">
+                <p id="question-text"></p>
+                <p id="score-display"></p>
+              </main>
+            </body></html>
+        """
+        calls = []
+
+        def fetch_html(source_url, allowed_hosts):
+            calls.append((source_url, allowed_hosts))
+            return url, document
+
+        context = gosterme_adapters.ResolutionContext(
+            normalized_url=url,
+            hostname=adapters.hostname(url),
+            fetch_html=fetch_html,
+        )
+        item = gosterme_adapters.AdapterRegistry(
+            [
+                adapters.IlkokulAkademiGithubEmbedAdapter(),
+                adapters.IlkokulAkademiNativeAdapter(),
+            ]
+        ).resolve_context(context)
+
+        self.assertEqual(item.adapter, "ilkokulakademi-native")
+        self.assertEqual(item.selector, "#math-game-container")
+        self.assertEqual(
+            calls,
+            [
+                (
+                    url,
+                    adapters.IlkokulAkademiNativeAdapter.SOURCE_HOSTS,
+                )
+            ],
+        )
 
 
 if __name__ == "__main__":
