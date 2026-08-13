@@ -30,6 +30,11 @@ First-party CSS and JavaScript URLs include a content-derived version. This
 keeps browser caches useful while ensuring a changed theme or viewer stylesheet
 is fetched immediately without adding another request.
 
+Only an exact match for the asset's current content version receives a
+one-year `immutable` cache policy. Unversioned, stale, or augmented query URLs
+retain the short cache lifetime, so an arbitrary query cannot make mutable
+content long-lived.
+
 Viewer controls provide an `rgba()` baseline for older WebKit releases and
 enhance theme-derived color mixing only when the browser reports support. Core
 action boundaries must not depend on `color-mix()` being available.

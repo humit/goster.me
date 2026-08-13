@@ -62,6 +62,8 @@ STATIC_ASSET_VERSIONS = {
     name: hashlib.sha256((STATIC_DIR / name).read_bytes()).hexdigest()[:12]
     for name in STATIC_ASSET_NAMES
 }
+STATIC_CACHE_CONTROL = "public, max-age=300"
+STATIC_IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
 PUBLIC_ORIGIN = public_origin()
 MAX_POST_BYTES = int(os.environ.get("GOSTER_MAX_POST_BYTES", "4096"))
 RESOLVE_RATE_PER_MINUTE = int(
@@ -106,6 +108,14 @@ def escape(value: str | None) -> str:
 def static_asset_url(name: str) -> str:
     """Return a content-versioned URL for an allowlisted static asset."""
     return f"/static/{name}?v={STATIC_ASSET_VERSIONS[name]}"
+
+
+def static_asset_cache_control(name: str, query: str) -> str:
+    """Cache only the exact current content version as immutable."""
+    version = STATIC_ASSET_VERSIONS.get(name)
+    if version is not None and query == f"v={version}":
+        return STATIC_IMMUTABLE_CACHE_CONTROL
+    return STATIC_CACHE_CONTROL
 
 
 def active_theme() -> str:
@@ -799,7 +809,7 @@ class Handler(legacy.Handler):
             "text/html; charset=utf-8",
         )
 
-    def send_static(self, name: str) -> bool:
+    def send_static(self, name: str, query: str = "") -> bool:
         allowed = {
             "product.css": "text/css; charset=utf-8",
             "viewer-controls.css": "text/css; charset=utf-8",
@@ -822,7 +832,7 @@ class Handler(legacy.Handler):
             200,
             body,
             content_type,
-            cache_control="public, max-age=300",
+            cache_control=static_asset_cache_control(name, query),
         )
         return True
 
@@ -894,7 +904,7 @@ class Handler(legacy.Handler):
             return
 
         if len(parts) == 2 and parts[0] == "static":
-            if self.send_static(parts[1]):
+            if self.send_static(parts[1], parsed.query):
                 return
 
         if len(parts) == 2 and parts[0] == "q":
