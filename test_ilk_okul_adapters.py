@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 import adapters
+import gosterme_adapters
 from gosterme_adapters.sites import (
     IlkOkulNativeAdapter as SiteIlkOkulNativeAdapter,
 )
@@ -64,6 +65,37 @@ class IlkOkulAdapterTests(unittest.TestCase):
         ):
             with self.assertRaises(adapters.NotApplicable):
                 adapters.IlkOkulNativeAdapter().resolve(url)
+
+    def test_context_path_uses_resolution_fetch(self):
+        url = "https://ilk-okul.com/1912/hizliokuma/icerik/7harfli/"
+        calls = []
+
+        def fetch_html(source_url, allowed_hosts):
+            calls.append((source_url, allowed_hosts))
+            return url, FAST_READING_HTML
+
+        context = gosterme_adapters.ResolutionContext(
+            normalized_url=url,
+            hostname=adapters.hostname(url),
+            fetch_html=fetch_html,
+        )
+
+        with patch.object(
+            adapters,
+            "fetch_html",
+            side_effect=AssertionError("legacy fetch path used"),
+        ):
+            item = gosterme_adapters.AdapterRegistry(
+                [adapters.IlkOkulNativeAdapter()]
+            ).resolve_context(context)
+
+        self.assertEqual(item.adapter, "ilk-okul-native")
+        self.assertEqual(item.render_mode, "isolate")
+        self.assertEqual(item.selector, "body")
+        self.assertEqual(
+            calls,
+            [(url, adapters.IlkOkulNativeAdapter.SOURCE_HOSTS)],
+        )
 
 
 if __name__ == "__main__":
