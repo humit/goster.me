@@ -85,6 +85,7 @@ class CompatibilityFacadeTests(unittest.TestCase):
                 hostname="example.com",
             ),
         )
+        self.assertIsNotNone(context.fetch_html)
 
 
 class ResolutionContextTests(unittest.TestCase):
@@ -124,6 +125,46 @@ class ResolutionContextTests(unittest.TestCase):
         first.parser_results["fixture"] = object()
 
         self.assertEqual(second.parser_results, {})
+
+    def test_fetch_result_is_shared_within_one_attempt(self):
+        calls = []
+
+        def fetch_html(url, allowed_hosts):
+            calls.append((url, allowed_hosts))
+            return "https://www.example.com/activity", "<html></html>"
+
+        context = gosterme_adapters.ResolutionContext(
+            normalized_url="https://example.com/activity",
+            hostname="example.com",
+            fetch_html=fetch_html,
+        )
+        allowed_hosts = {"example.com", "www.example.com"}
+
+        first = context.fetch(allowed_hosts)
+        second = context.fetch(allowed_hosts)
+
+        self.assertEqual(first, second)
+        self.assertEqual(
+            calls,
+            [("https://example.com/activity", allowed_hosts)],
+        )
+
+    def test_cached_fetch_result_is_revalidated_for_each_allowlist(self):
+        context = gosterme_adapters.ResolutionContext(
+            normalized_url="https://example.com/activity",
+            hostname="example.com",
+            fetch_html=lambda _url, _allowed_hosts: (
+                "https://www.example.com/activity",
+                "<html></html>",
+            ),
+        )
+        context.fetch({"example.com", "www.example.com"})
+
+        with self.assertRaisesRegex(
+            adapters.ResolveError,
+            "Redirected to disallowed host: www.example.com",
+        ):
+            context.fetch({"example.com"})
 
 
 class AdapterRegistryTests(unittest.TestCase):
