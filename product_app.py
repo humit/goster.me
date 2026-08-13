@@ -333,7 +333,6 @@ def product_document(
 <title>{escape(title)}</title>
 {f'<meta name="description" content="{escape(description)}">' if description else ''}
 {f'<link rel="canonical" href="{escape(canonical_url(canonical_path))}">' if canonical_path else ''}
-{legacy.BASE_STYLE}
 <link rel="stylesheet" href="{static_asset_url("product.css")}">
 {optional_stylesheets}</head>
 <body>

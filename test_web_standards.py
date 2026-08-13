@@ -40,6 +40,15 @@ class PublicWebStandardsTests(unittest.TestCase):
                 self.assertIn('<meta name="description" content="', page)
                 self.assertIn(f'<link rel="canonical" href="{canonical}">', page)
 
+    def test_primary_product_shell_has_no_inline_style(self):
+        page = product_app.render_home()
+
+        self.assertNotIn("<style>", page)
+        self.assertIn(
+            f'<link rel="stylesheet" href="{product_app.static_asset_url("product.css")}">',
+            page,
+        )
+
     def test_sitemap_contains_only_stable_indexable_pages(self):
         sitemap = product_app.sitemap_xml()
 
