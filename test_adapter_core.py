@@ -233,6 +233,37 @@ class AdapterRegistryTests(unittest.TestCase):
 
         self.assertEqual(calls, ["https://example.com/normalized"])
 
+    def test_context_path_prefers_context_aware_resolver(self):
+        calls = []
+        result = adapters.ResolvedContent(
+            kind="embed",
+            provider="fixture",
+            source_url="https://example.com/activity",
+        )
+
+        class Candidate:
+            name = "fixture"
+
+            def match(self, url):
+                return True
+
+            def resolve(self, url):
+                calls.append(("url", url))
+                raise AssertionError("legacy resolver used")
+
+            def resolve_context(self, context):
+                calls.append(("context", context))
+                return result
+
+        context = gosterme_adapters.ResolutionContext(
+            normalized_url="https://example.com/activity",
+            hostname="example.com",
+        )
+        registry = gosterme_adapters.AdapterRegistry([Candidate()])
+
+        self.assertIs(registry.resolve_context(context), result)
+        self.assertEqual(calls, [("context", context)])
+
 
 if __name__ == "__main__":
     unittest.main()
