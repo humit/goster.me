@@ -270,7 +270,7 @@ def product_document(
     *,
     description: str | None = None,
     canonical_path: str | None = None,
-    body_class: str | None = None,
+    document_class: str | None = None,
 ) -> str:
     """Shared HTML shell.
 
@@ -278,7 +278,7 @@ def product_document(
     so contributors can work on UI without editing the Python renderer.
     """
     return f"""<!doctype html>
-<html lang="tr">
+<html lang="tr"{f' class="{escape(document_class)}"' if document_class else ''}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -289,7 +289,7 @@ def product_document(
 {legacy.BASE_STYLE}
 <link rel="stylesheet" href="/static/product.css">
 </head>
-<body{f' class="{escape(body_class)}"' if body_class else ''}>
+<body>
 {body}
 <script src="/static/product.js" defer></script>
 </body>
@@ -344,7 +344,7 @@ def render_home(campaign: str | None = None) -> str:
 """,
         description=PUBLIC_META_DESCRIPTION,
         canonical_path="/",
-        body_class="home-document",
+        document_class="home-document",
     )
 
 

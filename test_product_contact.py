@@ -37,7 +37,7 @@ class ProductContactTests(unittest.TestCase):
         script = (product_app.STATIC_DIR / "product.js").read_text()
         stylesheet = (product_app.STATIC_DIR / "product.css").read_text()
 
-        self.assertIn('<body class="home-document">', page)
+        self.assertIn('<html lang="tr" class="home-document">', page)
         self.assertIn('method="post" action="/resolve"', page)
         self.assertIn('name="url"', page)
         self.assertIn('type="url"', page)
@@ -46,8 +46,9 @@ class ProductContactTests(unittest.TestCase):
         self.assertNotIn('document.createElement("style")', script)
         self.assertNotIn('button.textContent = "→"', script)
         self.assertNotIn("tool-first · v3", script)
-        self.assertIn("body.home-document", stylesheet)
-        self.assertIn("grid-template-columns: minmax(0, 1fr) 3.2rem", stylesheet)
+        self.assertIn(":root.home-document", stylesheet)
+        self.assertIn("grid-template-columns: minmax(0, 1fr) 2.7rem", stylesheet)
+        self.assertNotIn("outline: 2px solid var(--g-focus)", stylesheet)
 
     def test_about_explains_first_party_measurement(self):
         page = product_app.render_about()
