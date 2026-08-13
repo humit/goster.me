@@ -337,7 +337,11 @@ def resolve_url(
     url: str,
 ) -> ResolvedContent:
     url = normalized_url(url)
-    return AdapterRegistry(ADAPTERS).resolve(url, hostname=hostname)
+    context = ResolutionContext(
+        normalized_url=url,
+        hostname=hostname(url),
+    )
+    return AdapterRegistry(ADAPTERS).resolve_context(context)
 
 
 def matching_adapters(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
+from .context import ResolutionContext
 from .types import ContentAdapter, NotApplicable, ResolvedContent, UnsupportedURL
 
 
@@ -21,6 +22,22 @@ class AdapterRegistry:
         url: str,
         *,
         hostname: Callable[[str], str],
+    ) -> ResolvedContent:
+        return self._resolve(url, unsupported_hostname=lambda: hostname(url))
+
+    def resolve_context(self, context: ResolutionContext) -> ResolvedContent:
+        """Resolve using the normalized data for one resolution attempt."""
+
+        return self._resolve(
+            context.normalized_url,
+            unsupported_hostname=lambda: context.hostname,
+        )
+
+    def _resolve(
+        self,
+        url: str,
+        *,
+        unsupported_hostname: Callable[[], str],
     ) -> ResolvedContent:
         matched = False
         notes: list[str] = []
@@ -47,4 +64,4 @@ class AdapterRegistry:
                 message += f" ({details})"
             raise UnsupportedURL(message)
 
-        raise UnsupportedURL(f"No adapter supports host: {hostname(url)}")
+        raise UnsupportedURL(f"No adapter supports host: {unsupported_hostname()}")
