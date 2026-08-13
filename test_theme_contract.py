@@ -161,7 +161,37 @@ class ThemeContractTests(unittest.TestCase):
         with patch.object(handler, "send_static", return_value=True) as send:
             handler.do_GET()
 
-        send.assert_called_once_with("viewer-controls.css")
+        send.assert_called_once_with(
+            "viewer-controls.css",
+            "v=" + product_app.STATIC_ASSET_VERSIONS["viewer-controls.css"],
+        )
+
+    def test_exact_content_versions_are_cached_as_immutable(self):
+        for name, version in product_app.STATIC_ASSET_VERSIONS.items():
+            with self.subTest(name=name):
+                handler = product_app.Handler.__new__(product_app.Handler)
+                handler.send_bytes = Mock()
+
+                self.assertTrue(handler.send_static(name, f"v={version}"))
+                self.assertEqual(
+                    handler.send_bytes.call_args.kwargs["cache_control"],
+                    "public, max-age=31536000, immutable",
+                )
+
+    def test_unversioned_or_mismatched_assets_keep_short_cache(self):
+        name = "product.css"
+        version = product_app.STATIC_ASSET_VERSIONS[name]
+
+        for query in ("", "v=stale", f"v={version}&extra=1"):
+            with self.subTest(query=query):
+                handler = product_app.Handler.__new__(product_app.Handler)
+                handler.send_bytes = Mock()
+
+                self.assertTrue(handler.send_static(name, query))
+                self.assertEqual(
+                    handler.send_bytes.call_args.kwargs["cache_control"],
+                    "public, max-age=300",
+                )
 
     def test_viewer_panel_uses_the_active_accent_palette(self):
         product_styles = (product_app.STATIC_DIR / "product.css").read_text()
