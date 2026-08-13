@@ -28,6 +28,10 @@ from gosterme_adapters.sites import (
     IlkOkulNativeAdapter as SiteIlkOkulNativeAdapter,
     IlkokulAkademiGithubEmbedAdapter as SiteIlkokulAkademiGithubEmbedAdapter,
     IlkokulAkademiNativeAdapter as SiteIlkokulAkademiNativeAdapter,
+    TestSaatiZombifyAdapter as SiteTestSaatiZombifyAdapter,
+)
+from gosterme_adapters.sites.testsaati import (
+    ZombifyFingerprintParser as ExerciseFingerprintParser,
 )
 
 USER_AGENT = "Mozilla/5.0 Childsafe/0.2"
@@ -219,38 +223,6 @@ def fetch_html(
     return final_url, document
 
 
-class ExerciseFingerprintParser(BasicHTMLParser):
-    """
-    Detect native exercise engines without changing the source DOM.
-
-    This intentionally records only fingerprints. Rendering/isolation
-    belongs to the Childsafe renderer, not the adapter.
-    """
-
-    def __init__(self):
-        super().__init__()
-
-        self.has_zombify_quiz = False
-
-    def handle_starttag(self, tag, attrs):
-        super().handle_starttag(tag, attrs)
-
-        attrs = dict(attrs)
-
-        classes = set(
-            attrs.get("class", "").split()
-        )
-
-        if (
-            "zf-quiz" in classes
-            and (
-                "zf-trivia_quiz" in classes
-                or attrs.get("data-quiz_type")
-            )
-        ):
-            self.has_zombify_quiz = True
-
-
 class YouTubeAdapter(ProviderYouTubeAdapter):
     """Compatibility facade using the runtime-hardened module hooks."""
 
@@ -329,48 +301,17 @@ class IlkOkulNativeAdapter(SiteIlkOkulNativeAdapter):
         )
 
 
-class TestSaatiZombifyAdapter:
-    name = "testsaati-zombify"
+class TestSaatiZombifyAdapter(SiteTestSaatiZombifyAdapter):
+    """Compatibility facade using the centralized fetch path."""
 
-    SOURCE_HOSTS = {
-        "testsaati.com",
-        "www.testsaati.com",
-    }
-
-    def match(self, url: str) -> bool:
-        return hostname(url) in self.SOURCE_HOSTS
-
-    def resolve(
-        self,
-        url: str,
-    ) -> ResolvedContent:
-        url = normalized_url(url)
-
-        if not self.match(url):
-            raise NotApplicable()
-
-        final_url, document = fetch_html(
-            url,
-            allowed_hosts=self.SOURCE_HOSTS,
-        )
-
-        parser = ExerciseFingerprintParser()
-        parser.feed(document)
-
-        if not parser.has_zombify_quiz:
-            raise NotApplicable(
-                "No Zombify quiz found."
-            )
-
-        return ResolvedContent(
-            kind="native-exercise",
-            provider="zombify",
-            source_url=url,
-            title=parser.title,
-            content_url=final_url,
-            adapter=self.name,
-            render_mode="isolate",
-            selector=".zf-quiz",
+    def __init__(self):
+        super().__init__(
+            normalize_url=lambda url: normalized_url(url),
+            hostname=lambda url: hostname(url),
+            fetch_html=lambda url, allowed_hosts: fetch_html(
+                url,
+                allowed_hosts=allowed_hosts,
+            ),
         )
 
 
