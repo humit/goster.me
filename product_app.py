@@ -370,7 +370,7 @@ def render_about() -> str:
             <p>
                 Bir videoyu, oyunu, ödevi ya da etkinliği görmek; reklamları,
                 önerileri, otomatik oynatmayı ve dikkat dağıtıcı arayüzleri de
-                görmek zorunda olmak demek değildir.
+                görmek zorunda olmak değildir.
             </p>
         </section>
 
