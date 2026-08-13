@@ -49,130 +49,6 @@ def compact_preview_actions(
     source_host = urlparse(source_url).hostname or "kaynak"
 
     return f"""
-<style>
-.viewer-compact-menu {{
-    position: fixed;
-    right: max(.7rem, env(safe-area-inset-right));
-    bottom: max(4.75rem, calc(env(safe-area-inset-bottom) + 3.75rem));
-    z-index: 2147483646;
-    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}}
-.viewer-compact-menu[open]::before {{
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    background: transparent;
-}}
-.viewer-compact-menu > summary {{
-    position: relative;
-    z-index: 2;
-    width: 4.5rem;
-    min-height: 3rem;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: .08rem;
-    padding: .35rem .45rem .28rem;
-    box-sizing: border-box;
-    list-style: none;
-    cursor: pointer;
-    border: 1px solid rgba(255,255,255,.2);
-    border-radius: .85rem;
-    background: rgba(9,11,14,.74);
-    color: #fff;
-    opacity: .84;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    user-select: none;
-    box-shadow: 0 .3rem 1rem rgba(0,0,0,.14);
-}}
-.viewer-compact-menu > summary::-webkit-details-marker {{ display: none; }}
-.viewer-compact-menu > summary:hover,
-.viewer-compact-menu > summary:focus-visible,
-.viewer-compact-menu[open] > summary {{ opacity: 1; }}
-.viewer-compact-brand {{
-    font-size: .67rem;
-    font-weight: 700;
-    letter-spacing: -.02em;
-    line-height: 1.05;
-}}
-.viewer-compact-dots {{
-    font-size: 1rem;
-    font-weight: 700;
-    letter-spacing: .09em;
-    line-height: .8;
-}}
-.viewer-compact-panel {{
-    position: absolute;
-    z-index: 2;
-    right: 0;
-    bottom: calc(100% + .5rem);
-    width: min(19rem, calc(100vw - 1.4rem));
-    padding: .45rem;
-    border: 1px solid rgba(255,255,255,.13);
-    border-radius: .85rem;
-    background: rgba(12,14,18,.95);
-    color: #fff;
-    box-shadow: 0 .6rem 1.8rem rgba(0,0,0,.22);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-}}
-.viewer-compact-grid {{
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: .35rem;
-    align-items: stretch;
-}}
-.viewer-compact-action,
-.viewer-source-summary {{
-    min-height: 2.25rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    box-sizing: border-box;
-    padding: 0 .7rem;
-    border: 0;
-    border-radius: .6rem;
-    background: rgba(255,255,255,.08);
-    color: #fff;
-    font: inherit;
-    font-size: .76rem;
-    text-decoration: none;
-    cursor: pointer;
-}}
-.viewer-source {{
-    min-width: 0;
-    margin: 0;
-    grid-column: 1 / -1;
-}}
-.viewer-source-summary {{
-    width: 100%;
-    justify-content: center;
-    list-style: none;
-    color: rgba(255,255,255,.76);
-}}
-.viewer-source-summary::-webkit-details-marker {{ display: none; }}
-.viewer-source-body {{
-    padding: .5rem .2rem .1rem;
-}}
-.viewer-source-url {{
-    max-height: 5rem;
-    overflow: auto;
-    margin-bottom: .45rem;
-    color: rgba(255,255,255,.72);
-    font: 500 .68rem/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    overflow-wrap: anywhere;
-}}
-@media (max-width: 430px) {{
-    .viewer-compact-menu {{
-        right: max(.55rem, env(safe-area-inset-right));
-        bottom: max(5rem, calc(env(safe-area-inset-bottom) + 4rem));
-    }}
-    .viewer-compact-menu > summary {{ width: 4.25rem; min-height: 2.85rem; }}
-}}
-</style>
 <details class="viewer-compact-menu">
     <summary aria-label="goster.me menüsü" title="goster.me menüsü">
         <span class="viewer-compact-brand">goster.me</span>
@@ -207,6 +83,19 @@ def compact_preview_actions(
 # informational only: no direct navigation back to the third-party page.
 app.branded_preview_actions = compact_preview_actions
 app.legacy.preview_actions = compact_preview_actions
+
+
+def viewer_document(title: str, body: str, **kwargs) -> str:
+    """Load viewer-only controls without adding their CSS to stable pages."""
+    return app.product_document(
+        title,
+        body,
+        viewer_controls=True,
+        **kwargs,
+    )
+
+
+app.legacy.document = viewer_document
 
 
 def contact_return_code(query: str) -> str | None:
@@ -256,6 +145,7 @@ def render_sandbox_shell(code: str, item) -> str:
     ></iframe>
 </div>
 """,
+        viewer_controls=True,
     )
 
 

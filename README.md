@@ -186,6 +186,9 @@ Yeni provider'lar gerçek kullanımda görülen URL'lere göre eklenir.
 `docs/CAPACITY_SCALABILITY_RESILIENCE.md`
 : Sunucu darboğazları, SPoF'lar ve dikey/yatay ölçekleme sözleşmesi.
 
+`docs/THEMING.md`
+: Ortak tema token'ları, açık tema seçimi ve yeni tema ekleme sözleşmesi.
+
 ## Test
 
 Short-link davranışı yalnızca Python standard library kullanılarak test edilebilir:
