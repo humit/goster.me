@@ -126,6 +126,63 @@ class ResolutionContextTests(unittest.TestCase):
 
         self.assertEqual(second.parser_results, {})
 
+    def test_parser_result_factory_runs_once_per_key(self):
+        context = gosterme_adapters.ResolutionContext(
+            normalized_url="https://example.com/activity",
+            hostname="example.com",
+        )
+        calls = []
+        result = object()
+
+        def create_result():
+            calls.append("create")
+            return result
+
+        first = context.get_parser_result("fixture", create_result)
+        second = context.get_parser_result(
+            "fixture",
+            lambda: self.fail("parser result was recreated"),
+        )
+
+        self.assertIs(first, result)
+        self.assertIs(second, result)
+        self.assertEqual(calls, ["create"])
+
+    def test_none_is_cached_as_a_parser_result(self):
+        context = gosterme_adapters.ResolutionContext(
+            normalized_url="https://example.com/activity",
+            hostname="example.com",
+        )
+
+        self.assertIsNone(
+            context.get_parser_result("fixture", lambda: None)
+        )
+        self.assertIsNone(
+            context.get_parser_result(
+                "fixture",
+                lambda: self.fail("parser result was recreated"),
+            )
+        )
+
+    def test_parser_factory_errors_are_not_cached(self):
+        context = gosterme_adapters.ResolutionContext(
+            normalized_url="https://example.com/activity",
+            hostname="example.com",
+        )
+        result = object()
+
+        def fail():
+            raise ValueError("parse failed")
+
+        with self.assertRaisesRegex(ValueError, "parse failed"):
+            context.get_parser_result("fixture", fail)
+
+        self.assertNotIn("fixture", context.parser_results)
+        self.assertIs(
+            context.get_parser_result("fixture", lambda: result),
+            result,
+        )
+
     def test_fetch_result_is_shared_within_one_attempt(self):
         calls = []
 
