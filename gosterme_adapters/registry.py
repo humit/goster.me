@@ -45,7 +45,16 @@ class AdapterRegistry:
         notes: list[str] = []
 
         for adapter in self._adapters:
-            if not adapter.match(url):
+            try:
+                matches = adapter.match(url)
+            except Exception:
+                if context is not None:
+                    context.trace_candidate(adapter.name, "error")
+                raise
+
+            if not matches:
+                if context is not None:
+                    context.trace_candidate(adapter.name, "not-matched")
                 continue
 
             matched = True
@@ -57,11 +66,22 @@ class AdapterRegistry:
                     None,
                 )
                 if context is not None and callable(resolve_context):
-                    return resolve_context(context)
-                return adapter.resolve(url)
+                    result = resolve_context(context)
+                else:
+                    result = adapter.resolve(url)
             except NotApplicable as exc:
+                if context is not None:
+                    context.trace_candidate(adapter.name, "not-applicable")
                 if str(exc):
                     notes.append(f"{adapter.name}: {exc}")
+            except Exception:
+                if context is not None:
+                    context.trace_candidate(adapter.name, "error")
+                raise
+            else:
+                if context is not None:
+                    context.trace_candidate(adapter.name, "resolved")
+                return result
 
         if matched:
             details = "; ".join(notes)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TypeVar, cast
+from typing import Literal, TypeVar, cast
 from urllib.parse import urlparse
 
 from .types import ResolveError
@@ -12,6 +12,20 @@ from .types import ResolveError
 
 FetchHTML = Callable[[str, set[str]], tuple[str, str]]
 ParserResult = TypeVar("ParserResult")
+CandidateOutcome = Literal[
+    "not-matched",
+    "not-applicable",
+    "resolved",
+    "error",
+]
+
+
+@dataclass(frozen=True)
+class CandidateTraceEntry:
+    """Record one adapter outcome without public or source-content details."""
+
+    adapter: str
+    outcome: CandidateOutcome
 
 
 @dataclass
@@ -28,6 +42,21 @@ class ResolutionContext:
     final_url: str | None = None
     document: str | None = None
     parser_results: dict[str, object] = field(default_factory=dict)
+    candidate_trace: list[CandidateTraceEntry] = field(
+        default_factory=list,
+        compare=False,
+    )
+
+    def trace_candidate(
+        self,
+        adapter: str,
+        outcome: CandidateOutcome,
+    ) -> None:
+        """Append one deterministic registry outcome for diagnostics."""
+
+        self.candidate_trace.append(
+            CandidateTraceEntry(adapter=adapter, outcome=outcome)
+        )
 
     def get_parser_result(
         self,
