@@ -34,6 +34,77 @@ def _event_map(store: analytics.AnalyticsStore, *, since: int, campaign: str | N
     }
 
 
+def _funnel_rows(path: Path, *, since: int, campaign: str | None,
+                 excluded_tags: set[str]) -> dict[str, int]:
+    """Return same-visitor-day funnel counts without treating shared-link opens as conversions."""
+    where = "occurred_at >= ? AND visitor_tag IS NOT NULL"
+    params: list[object] = [since]
+    normalized_campaign = analytics.clean_campaign(campaign)
+    if normalized_campaign:
+        where += " AND campaign = ?"
+        params.append(normalized_campaign)
+    tags = sorted(excluded_tags)
+    if tags:
+        where += f" AND visitor_tag NOT IN ({','.join('?' for _ in tags)})"
+        params.extend(tags)
+
+    with sqlite3.connect(path) as db:
+        row = db.execute(
+            f"""
+            WITH first_event AS (
+                SELECT visitor_tag, event, MIN(occurred_at) AS first_at
+                FROM analytics_events
+                WHERE {where}
+                  AND event IN ('landing_view', 'resolve_attempt', 'resolve_success', 'viewer_open')
+                GROUP BY visitor_tag, event
+            ),
+            landing AS (
+                SELECT visitor_tag, first_at FROM first_event WHERE event = 'landing_view'
+            ),
+            attempts AS (
+                SELECT visitor_tag, first_at FROM first_event WHERE event = 'resolve_attempt'
+            ),
+            successes AS (
+                SELECT visitor_tag, first_at FROM first_event WHERE event = 'resolve_success'
+            ),
+            viewers AS (
+                SELECT visitor_tag, first_at FROM first_event WHERE event = 'viewer_open'
+            )
+            SELECT
+                (SELECT COUNT(*) FROM landing),
+                (SELECT COUNT(*) FROM attempts),
+                (SELECT COUNT(*) FROM successes),
+                (SELECT COUNT(*) FROM viewers),
+                (
+                    SELECT COUNT(*) FROM attempts a
+                    JOIN landing l USING (visitor_tag)
+                    WHERE l.first_at <= a.first_at
+                ),
+                (
+                    SELECT COUNT(*) FROM successes s
+                    JOIN attempts a USING (visitor_tag)
+                    WHERE a.first_at <= s.first_at
+                ),
+                (
+                    SELECT COUNT(*) FROM viewers v
+                    JOIN successes s USING (visitor_tag)
+                    WHERE s.first_at <= v.first_at
+                )
+            """,
+            params,
+        ).fetchone()
+
+    return {
+        "landing": int(row[0] or 0),
+        "attempts": int(row[1] or 0),
+        "successes": int(row[2] or 0),
+        "viewers": int(row[3] or 0),
+        "landed_then_resolved": int(row[4] or 0),
+        "attempted_then_succeeded": int(row[5] or 0),
+        "resolved_then_viewed": int(row[6] or 0),
+    }
+
+
 def _content_rows(path: Path, *, since: int, limit: int) -> list[dict[str, object]]:
     with sqlite3.connect(path) as db:
         exists = db.execute(
@@ -196,12 +267,6 @@ def main() -> None:
 
     store = analytics.AnalyticsStore()
     campaign = analytics.clean_campaign(args.campaign)
-    stats = _event_map(
-        store,
-        since=since,
-        campaign=args.campaign,
-        excluded_tags=excluded_tags,
-    )
 
     print("goster.me usage report")
     print(f"period={_format(since, zone)} -> {_format(now, zone)}")
@@ -239,15 +304,33 @@ def main() -> None:
         )
         print(f"excluded_events={before - after}")
 
-    landing = stats.get("landing_view", (0, 0))[1]
-    attempts = stats.get("resolve_attempt", (0, 0))[1]
-    successes = stats.get("resolve_success", (0, 0))[1]
-    viewers = stats.get("viewer_open", (0, 0))[1]
-    print("\nfunnel")
-    print(f"landing_visitors={landing}")
-    print(f"resolve_visitors={attempts} activation={_percent(attempts, landing)}")
-    print(f"successful_resolve_visitors={successes} success={_percent(successes, attempts)}")
-    print(f"viewer_visitors={viewers} view_after_resolve={_percent(viewers, successes)}")
+    funnel = _funnel_rows(
+        store.path,
+        since=since,
+        campaign=args.campaign,
+        excluded_tags=excluded_tags,
+    )
+    print("\nfunnel_same_visitor_day")
+    print(f"landing_visitors={funnel['landing']}")
+    print(
+        f"landed_then_resolved={funnel['landed_then_resolved']} "
+        f"activation={_percent(funnel['landed_then_resolved'], funnel['landing'])}"
+    )
+    print(f"resolve_visitors={funnel['attempts']}")
+    print(
+        f"attempted_then_succeeded={funnel['attempted_then_succeeded']} "
+        f"success={_percent(funnel['attempted_then_succeeded'], funnel['attempts'])}"
+    )
+    print(f"successful_resolve_visitors={funnel['successes']}")
+    print(
+        f"resolved_then_viewed={funnel['resolved_then_viewed']} "
+        f"view_after_resolve={_percent(funnel['resolved_then_viewed'], funnel['successes'])}"
+    )
+    print(f"total_viewer_visitors={funnel['viewers']}")
+    print(
+        "viewer_without_resolve_in_window="
+        f"{max(0, funnel['viewers'] - funnel['resolved_then_viewed'])}"
+    )
 
     print(f"\n{'event':20} {'count':>7} {'visitor_days':>12}")
     for event, count, event_visitors in store.event_stats(
