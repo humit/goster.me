@@ -56,5 +56,5 @@ cmd_analytics() {
         forwarded+=("--exclude-ip" "$ssh_client")
     fi
     run_app env GOSTER_ANALYTICS_KEY="$key" \
-        "$PYTHON" "$APP_ROOT/analytics.py" "${forwarded[@]}"
+        "$PYTHON" "$APP_ROOT/analytics_report.py" "${forwarded[@]}"
 }
