@@ -8,7 +8,6 @@ import sqlite3
 import time
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import analytics
@@ -119,22 +118,23 @@ def _unsupported_rows(path: Path, *, since: int, limit: int) -> list[tuple[str, 
         if not exists:
             return []
         columns = {row[1] for row in db.execute("PRAGMA table_info(unsupported_targets)")}
-        url_column = next((name for name in ("source_url", "url") if name in columns), None)
-        time_column = next((name for name in ("last_seen_at", "created_at", "occurred_at") if name in columns), None)
-        count_column = next((name for name in ("attempt_count", "count") if name in columns), None)
-        if not url_column or not time_column:
+        required = {"host", "last_seen_at", "attempts"}
+        if not required.issubset(columns):
             return []
-        count_expr = count_column if count_column else "1"
-        rows = db.execute(
-            f"SELECT {url_column}, {count_expr} FROM unsupported_targets WHERE {time_column} >= ?",
-            (since,),
-        ).fetchall()
-
-    domains: dict[str, int] = {}
-    for value, count in rows:
-        hostname = (urlparse(str(value)).hostname or "unknown").lower()
-        domains[hostname] = domains.get(hostname, 0) + int(count or 1)
-    return sorted(domains.items(), key=lambda item: (-item[1], item[0]))[:limit]
+        return [
+            (str(row[0]), int(row[1]))
+            for row in db.execute(
+                """
+                SELECT host, SUM(attempts)
+                FROM unsupported_targets
+                WHERE last_seen_at >= ?
+                GROUP BY host
+                ORDER BY SUM(attempts) DESC, host
+                LIMIT ?
+                """,
+                (since, limit),
+            )
+        ]
 
 
 def _format(timestamp: int, zone: ZoneInfo) -> str:
