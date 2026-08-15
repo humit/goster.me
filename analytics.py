@@ -68,6 +68,15 @@ def daily_visitor_tag(value: str, *, occurred_at: int, key: str) -> str:
     return hmac.new(key.encode(), message, hashlib.sha256).hexdigest()[:32]
 
 
+def persistent_visitor_tag(value: str, *, key: str) -> str:
+    """Return a stable keyed network tag without retaining the source IP."""
+    if len(key) < 32:
+        raise ValueError("analytics key must be at least 32 characters")
+    canonical_ip = str(ipaddress.ip_address(value))
+    message = f"goster-persistent-visitor-v1\0{canonical_ip}".encode()
+    return hmac.new(key.encode(), message, hashlib.sha256).hexdigest()[:32]
+
+
 class AnalyticsStore:
     """Small, first-party product analytics store with privacy-preserving identity."""
 
@@ -156,9 +165,11 @@ class AnalyticsStore:
             raise ValueError("Unsupported analytics event.")
         occurred_at = int(time.time() if now is None else now)
         visitor_tag = None
+        persistent_id = clean_visitor_id(visitor_id)
         if visitor_ip and self.key:
             visitor_tag = daily_visitor_tag(visitor_ip, occurred_at=occurred_at, key=self.key)
-        persistent_id = clean_visitor_id(visitor_id)
+            if persistent_id is None:
+                persistent_id = persistent_visitor_tag(visitor_ip, key=self.key)
         normalized_content_ref = self._token(content_ref)
         active_day = self._active_day(occurred_at)
         with self._connect() as db:
@@ -182,6 +193,7 @@ class AnalyticsStore:
                         visitor_id, first_seen, last_seen, active_days, last_active_day
                     ) VALUES (?, ?, ?, 1, ?)
                     ON CONFLICT(visitor_id) DO UPDATE SET
+                        first_seen = MIN(analytics_visitors.first_seen, excluded.first_seen),
                         last_seen = MAX(analytics_visitors.last_seen, excluded.last_seen),
                         active_days = analytics_visitors.active_days +
                             CASE WHEN analytics_visitors.last_active_day <> excluded.last_active_day
