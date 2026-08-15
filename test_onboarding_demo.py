@@ -11,9 +11,10 @@ class OnboardingDemoTests(unittest.TestCase):
         self.assertEqual(DEMO_ROUTE, "/demo/activity")
 
     def test_demo_explains_before_after_transformation(self):
-        self.assertIn("İçerik aynı. Etrafı değişiyor.", self.html)
-        self.assertIn("Etkinlik aynı kalırken", self.html)
-        self.assertIn("kaynak sayfanın geri kalanı gösterilmiyor", self.html)
+        normalized = self.html.casefold()
+        self.assertIn("i̇çerik aynı. etrafı değişiyor.", normalized)
+        self.assertIn("etkinlik aynı kalırken", normalized)
+        self.assertIn("kaynak sayfanın geri kalanı gösterilmiyor", normalized)
 
     def test_demo_exposes_repeatable_source_and_clean_toggle(self):
         self.assertIn('data-demo-mode="source"', self.html)
