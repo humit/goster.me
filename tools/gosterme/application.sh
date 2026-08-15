@@ -25,7 +25,10 @@ cmd_analytics() {
     require_path "$PYTHON"
 
     local key ssh_client="" arg
+    local checkout_root
     local -a forwarded=()
+    checkout_root="$(CDPATH= cd -- "${TOOL_DIR}/.." && pwd)"
+
     for arg in "$@"; do
         if [ "$arg" = "--exclude-current-ssh-client" ]; then
             [ -n "${SSH_CONNECTION:-}" ] \
@@ -56,5 +59,5 @@ cmd_analytics() {
         forwarded+=("--exclude-ip" "$ssh_client")
     fi
     run_app env GOSTER_ANALYTICS_KEY="$key" \
-        "$PYTHON" "$APP_ROOT/analytics_report.py" "${forwarded[@]}"
+        "$PYTHON" "$checkout_root/analytics_report.py" "${forwarded[@]}"
 }
