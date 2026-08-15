@@ -405,7 +405,8 @@ def render_about() -> str:
     </header>
 
     <article class="info-content">
-        <h1>İçeriği göster. Gerisini gösterme.</h1>
+        <h1>İçeriği göster.<br>Gerisini <a class="text-link" href="/">goster.me</a></h1>
+
         <p class="info-lead">
             goster.me, bir bağlantının içindeki asıl içeriği ayıklayıp gereksiz
             sayfa kalabalığını mümkün olduğunca geride bırakır.
