@@ -9,9 +9,7 @@ import unittest
 from pathlib import Path
 
 from analytics import AnalyticsStore
-from analytics_report import _campaign_rows, _content_rows, _unsupported_rows
-from shortlinks import ShortLinkStore
-from adapters import ResolvedContent
+from analytics_report import _campaign_rows, _content_rows, _funnel_rows, _unsupported_rows
 from unsupported import UnsupportedTargetStore
 
 
@@ -39,6 +37,40 @@ class AnalyticsReportTests(unittest.TestCase):
             _campaign_rows(self.path, since=0, excluded_tags=set()),
             [("forum-a", 1, 1, 1)],
         )
+
+    def test_funnel_counts_only_ordered_same_visitor_day_transitions(self):
+        active = "203.0.113.10"
+        shared = "198.51.100.20"
+        self.analytics.record("landing_view", now=100, visitor_ip=active)
+        self.analytics.record("resolve_attempt", now=101, visitor_ip=active)
+        self.analytics.record("resolve_success", now=102, visitor_ip=active)
+        self.analytics.record("viewer_open", now=103, visitor_ip=active)
+        self.analytics.record("viewer_open", now=104, visitor_ip=shared)
+
+        self.assertEqual(
+            _funnel_rows(self.path, since=0, campaign=None, excluded_tags=set()),
+            {
+                "landing": 1,
+                "attempts": 1,
+                "successes": 1,
+                "viewers": 2,
+                "landed_then_resolved": 1,
+                "attempted_then_succeeded": 1,
+                "resolved_then_viewed": 1,
+            },
+        )
+
+    def test_funnel_does_not_count_reverse_order_as_conversion(self):
+        visitor = "203.0.113.10"
+        self.analytics.record("viewer_open", now=100, visitor_ip=visitor)
+        self.analytics.record("resolve_success", now=101, visitor_ip=visitor)
+        self.analytics.record("resolve_attempt", now=102, visitor_ip=visitor)
+        self.analytics.record("landing_view", now=103, visitor_ip=visitor)
+
+        rows = _funnel_rows(self.path, since=0, campaign=None, excluded_tags=set())
+        self.assertEqual(rows["landed_then_resolved"], 0)
+        self.assertEqual(rows["attempted_then_succeeded"], 0)
+        self.assertEqual(rows["resolved_then_viewed"], 0)
 
     def test_content_rows_use_short_link_resolves_and_opens(self):
         with sqlite3.connect(self.path) as db:
