@@ -55,7 +55,9 @@ class GosterApplicationCommandTests(unittest.TestCase):
                 text=True,
             )
 
-        self.assertIn("goster.me analytics since_hours=1 campaign=all", result.stdout)
+        self.assertIn("goster.me usage report", result.stdout)
+        self.assertIn("period=", result.stdout)
+        self.assertIn("campaign=all", result.stdout)
         self.assertIn("excluded_events=1", result.stdout)
         self.assertIn("landing_view", result.stdout)
         self.assertRegex(result.stdout, r"landing_view\s+1")
