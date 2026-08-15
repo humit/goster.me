@@ -17,6 +17,7 @@ from analytics import (
     clean_visitor_id,
     daily_visitor_tag,
     parse_since,
+    persistent_visitor_tag,
     tags_for_ip,
 )
 
@@ -61,6 +62,38 @@ class AnalyticsStoreTests(unittest.TestCase):
         self.assertEqual(first, same_day)
         self.assertNotEqual(first, next_day)
         self.assertNotIn("203.0.113.10", first)
+
+    def test_persistent_network_tag_is_stable_across_days(self):
+        first = persistent_visitor_tag("203.0.113.10", key=self.key)
+        second = persistent_visitor_tag("203.0.113.10", key=self.key)
+        other = persistent_visitor_tag("198.51.100.20", key=self.key)
+        self.assertEqual(first, second)
+        self.assertNotEqual(first, other)
+        self.assertNotIn("203.0.113.10", first)
+
+    def test_record_uses_network_fallback_when_browser_id_is_absent(self):
+        self.store.record("landing_view", now=100, visitor_ip="203.0.113.10")
+        self.store.record("landing_view", now=86401, visitor_ip="203.0.113.10")
+        with sqlite3.connect(self.path) as db:
+            visitor_ids = [
+                row[0] for row in db.execute(
+                    "SELECT DISTINCT visitor_id FROM analytics_events"
+                )
+            ]
+            active_days = db.execute(
+                "SELECT active_days FROM analytics_visitors"
+            ).fetchone()[0]
+        self.assertEqual(len(visitor_ids), 1)
+        self.assertEqual(active_days, 2)
+
+    def test_explicit_browser_id_takes_precedence_over_network_fallback(self):
+        visitor_id = "abcdefghijklmnopqrstuvwx"
+        self.store.record(
+            "landing_view", now=100, visitor_ip="203.0.113.10", visitor_id=visitor_id
+        )
+        with sqlite3.connect(self.path) as db:
+            stored = db.execute("SELECT visitor_id FROM analytics_events").fetchone()[0]
+        self.assertEqual(stored, visitor_id)
 
     def test_persistent_visitor_id_validation(self):
         self.assertEqual(
