@@ -109,11 +109,14 @@ def structural_isolation_script(selector: str) -> str:
     selector_json = json.dumps(selector)
     scroll_fix = ""
 
-    if selector == "#bilge-quiz-app":
+    if selector in {
+        "#bilge-quiz-app",
+        "#exam-panel-wrapper",
+    }:
         scroll_fix = """
-    // Bilge Quiz can be taller than a phone viewport. The legacy isolation
-    // CSS positions every activity root absolutely, which removes its height
-    // from normal document flow and prevents mobile document scrolling.
+    // Some activities can be taller than a phone viewport. The legacy
+    // isolation CSS positions every activity root absolutely, which removes
+    // its height from normal document flow and prevents mobile scrolling.
     document.documentElement.style.setProperty("overflow-y", "auto", "important");
     document.body.style.setProperty("overflow-y", "auto", "important");
     document.body.style.setProperty("height", "auto", "important");
