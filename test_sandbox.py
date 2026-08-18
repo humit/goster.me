@@ -135,7 +135,16 @@ class SandboxStoreTests(unittest.TestCase):
         self.assertIn('root.style.setProperty("height", "auto", "important")', script)
         self.assertIn('root.style.setProperty("min-height", "100dvh", "important")', script)
 
-    def test_non_bilge_structural_isolation_keeps_default_positioning(self):
+    def test_exam_wrapper_structural_isolation_restores_mobile_document_scroll(self):
+        script = sandbox_app.structural_isolation_script("#exam-panel-wrapper")
+
+        self.assertIn('document.documentElement.style.setProperty("overflow-y", "auto", "important")', script)
+        self.assertIn('document.body.style.setProperty("overflow-y", "auto", "important")', script)
+        self.assertIn('root.style.setProperty("position", "relative", "important")', script)
+        self.assertIn('root.style.setProperty("height", "auto", "important")', script)
+        self.assertIn('root.style.setProperty("min-height", "100dvh", "important")', script)
+
+    def test_other_structural_isolation_keeps_default_positioning(self):
         script = sandbox_app.structural_isolation_script("#game")
 
         self.assertNotIn('root.style.setProperty("position", "relative", "important")', script)
