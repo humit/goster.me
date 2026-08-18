@@ -223,6 +223,18 @@ def native_selector(ids: set[str], classes: set[str]) -> str | None:
         return "#game-wrapper"
 
     if {
+        "exam-panel-wrapper",
+        "start-screen",
+        "active-game-container",
+        "game-card",
+        "question-text",
+        "options-container",
+        "result-screen",
+        "final-score",
+    }.issubset(ids):
+        return "#exam-panel-wrapper"
+
+    if {
         "active-game-container",
         "game-card",
         "question-text",
