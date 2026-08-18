@@ -8,7 +8,7 @@ import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from html.parser import HTMLParser
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
 from adapters import (
     AdapterError,
@@ -100,10 +100,34 @@ def discover_post_urls(
             query="",
             fragment="",
         ).geturl()
-
         urls.append(canonical)
 
     return list(dict.fromkeys(urls))
+
+
+def discover_older_index_url(
+    index_html: str,
+    *,
+    base_url: str,
+) -> str | None:
+    parser = parse_html(index_html)
+
+    for href in parser.links:
+        url = urljoin(base_url, href)
+        parsed = urlparse(url)
+
+        if hostname(url) not in ALLOWED_HOSTS:
+            continue
+        if parsed.path.rstrip("/") != "/search":
+            continue
+
+        query = parse_qs(parsed.query)
+        if "updated-max" not in query:
+            continue
+
+        return parsed._replace(fragment="").geturl()
+
+    return None
 
 
 def discovery_fingerprint(html: str, *, base_url: str) -> tuple[str, ...]:
@@ -186,23 +210,60 @@ def inspect_url(url: str) -> DiscoveryRecord:
     )
 
 
+def discover_urls(
+    *,
+    index_url: str = INDEX_URL,
+    limit: int = 0,
+    max_pages: int = 20,
+) -> list[str]:
+    urls: list[str] = []
+    seen_urls: set[str] = set()
+    seen_pages: set[str] = set()
+    current_url: str | None = index_url
+
+    while current_url and len(seen_pages) < max_pages:
+        if current_url in seen_pages:
+            break
+        seen_pages.add(current_url)
+
+        final_url, index_html = fetch_html(
+            current_url,
+            allowed_hosts=ALLOWED_HOSTS,
+        )
+
+        for url in discover_post_urls(index_html, base_url=final_url):
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+            urls.append(url)
+
+            if limit > 0 and len(urls) >= limit:
+                return urls
+
+        next_url = discover_older_index_url(
+            index_html,
+            base_url=final_url,
+        )
+
+        if not next_url or next_url in seen_pages:
+            break
+        current_url = next_url
+
+    return urls
+
+
 def scan(
     *,
     index_url: str = INDEX_URL,
     limit: int = 0,
     delay_ms: int = 250,
+    max_pages: int = 20,
 ) -> list[DiscoveryRecord]:
-    final_url, index_html = fetch_html(
-        index_url,
-        allowed_hosts=ALLOWED_HOSTS,
+    urls = discover_urls(
+        index_url=index_url,
+        limit=limit,
+        max_pages=max_pages,
     )
-    urls = discover_post_urls(
-        index_html,
-        base_url=final_url,
-    )
-
-    if limit > 0:
-        urls = urls[:limit]
 
     records: list[DiscoveryRecord] = []
 
@@ -286,13 +347,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--index-url",
         default=INDEX_URL,
-        help=f"Blogger search/index page (default: {INDEX_URL})",
+        help=f"Initial Blogger search/index page (default: {INDEX_URL})",
     )
     parser.add_argument(
         "--limit",
         type=int,
         default=0,
-        help="Scan at most N discovered posts; 0 means all discovered on the index page.",
+        help="Scan at most N discovered posts; 0 means all discovered pages.",
+    )
+    parser.add_argument(
+        "--max-pages",
+        type=int,
+        default=20,
+        help="Follow at most N Blogger index pages (default: 20).",
     )
     parser.add_argument(
         "--delay-ms",
@@ -308,6 +375,8 @@ def main() -> None:
 
     if args.limit < 0:
         raise SystemExit("ERROR: --limit must be >= 0")
+    if args.max_pages <= 0:
+        raise SystemExit("ERROR: --max-pages must be > 0")
     if args.delay_ms < 0:
         raise SystemExit("ERROR: --delay-ms must be >= 0")
     if hostname(args.index_url) not in ALLOWED_HOSTS:
@@ -317,6 +386,7 @@ def main() -> None:
         index_url=args.index_url,
         limit=args.limit,
         delay_ms=args.delay_ms,
+        max_pages=args.max_pages,
     )
     print_report(records)
 
