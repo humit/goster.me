@@ -10,7 +10,7 @@ from adapters import ResolvedContent, UnsupportedURL
 
 
 class IlkokulAkademiDiscoveryTests(unittest.TestCase):
-    def test_discovers_only_same-site_post_urls(self):
+    def test_discovers_same_site_post_urls_only(self):
         html = """
         <a href="/2026/08/example-one.html">one</a>
         <a href="https://www.ilkokulakademi.com/2025/12/example-two.html?x=1#top">two</a>
