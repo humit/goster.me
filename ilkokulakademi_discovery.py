@@ -21,7 +21,7 @@ from adapters import (
 
 
 SITE_ROOT = "https://www.ilkokulakademi.com/"
-SITEMAP_URL = urljoin(SITE_ROOT, "p/sitemap.html")
+INDEX_URL = urljoin(SITE_ROOT, "search?max-results=50")
 ALLOWED_HOSTS = {
     "ilkokulakademi.com",
     "www.ilkokulakademi.com",
@@ -79,11 +79,11 @@ def parse_html(value: str) -> DiscoveryParser:
 
 
 def discover_post_urls(
-    sitemap_html: str,
+    index_html: str,
     *,
-    base_url: str = SITEMAP_URL,
+    base_url: str = INDEX_URL,
 ) -> list[str]:
-    parser = parse_html(sitemap_html)
+    parser = parse_html(index_html)
     urls: list[str] = []
 
     for href in parser.links:
@@ -188,16 +188,16 @@ def inspect_url(url: str) -> DiscoveryRecord:
 
 def scan(
     *,
-    sitemap_url: str = SITEMAP_URL,
+    index_url: str = INDEX_URL,
     limit: int = 0,
     delay_ms: int = 250,
 ) -> list[DiscoveryRecord]:
-    final_url, sitemap_html = fetch_html(
-        sitemap_url,
+    final_url, index_html = fetch_html(
+        index_url,
         allowed_hosts=ALLOWED_HOSTS,
     )
     urls = discover_post_urls(
-        sitemap_html,
+        index_html,
         base_url=final_url,
     )
 
@@ -284,15 +284,15 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument(
-        "--sitemap-url",
-        default=SITEMAP_URL,
-        help=f"Sitemap/index page (default: {SITEMAP_URL})",
+        "--index-url",
+        default=INDEX_URL,
+        help=f"Blogger search/index page (default: {INDEX_URL})",
     )
     parser.add_argument(
         "--limit",
         type=int,
         default=0,
-        help="Scan at most N discovered posts; 0 means all.",
+        help="Scan at most N discovered posts; 0 means all discovered on the index page.",
     )
     parser.add_argument(
         "--delay-ms",
@@ -310,11 +310,11 @@ def main() -> None:
         raise SystemExit("ERROR: --limit must be >= 0")
     if args.delay_ms < 0:
         raise SystemExit("ERROR: --delay-ms must be >= 0")
-    if hostname(args.sitemap_url) not in ALLOWED_HOSTS:
-        raise SystemExit("ERROR: sitemap host must be İlkokul Akademi")
+    if hostname(args.index_url) not in ALLOWED_HOSTS:
+        raise SystemExit("ERROR: index host must be İlkokul Akademi")
 
     records = scan(
-        sitemap_url=args.sitemap_url,
+        index_url=args.index_url,
         limit=args.limit,
         delay_ms=args.delay_ms,
     )
