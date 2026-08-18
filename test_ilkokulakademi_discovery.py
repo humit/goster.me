@@ -28,6 +28,56 @@ class IlkokulAkademiDiscoveryTests(unittest.TestCase):
             ],
         )
 
+    def test_discovers_blogger_older_index_url(self):
+        html = """
+        <a href="/search?max-results=7">current</a>
+        <a href="/search?max-results=7&amp;updated-max=2025-12-10T12%3A52%3A00%2B03%3A00">older</a>
+        """
+
+        self.assertEqual(
+            discovery.discover_older_index_url(
+                html,
+                base_url="https://www.ilkokulakademi.com/search?max-results=7",
+            ),
+            "https://www.ilkokulakademi.com/search?max-results=7&updated-max=2025-12-10T12%3A52%3A00%2B03%3A00",
+        )
+
+    def test_discover_urls_follows_pagination_until_limit(self):
+        first = """
+        <a href="/2026/08/a.html">a</a>
+        <a href="/2026/08/b.html">b</a>
+        <a href="/search?max-results=50&amp;updated-max=2026-08-01T00%3A00%3A00%2B03%3A00">older</a>
+        """
+        second_url = (
+            "https://www.ilkokulakademi.com/search?max-results=50&"
+            "updated-max=2026-08-01T00%3A00%3A00%2B03%3A00"
+        )
+        second = """
+        <a href="/2026/07/c.html">c</a>
+        <a href="/2026/07/d.html">d</a>
+        """
+
+        def fake_fetch(url, *, allowed_hosts):
+            self.assertEqual(allowed_hosts, discovery.ALLOWED_HOSTS)
+            if url == discovery.INDEX_URL:
+                return url, first
+            if url == second_url:
+                return url, second
+            raise AssertionError(url)
+
+        with patch.object(discovery, "fetch_html", side_effect=fake_fetch) as fetch_html:
+            urls = discovery.discover_urls(limit=3, max_pages=5)
+
+        self.assertEqual(
+            urls,
+            [
+                "https://www.ilkokulakademi.com/2026/08/a.html",
+                "https://www.ilkokulakademi.com/2026/08/b.html",
+                "https://www.ilkokulakademi.com/2026/07/c.html",
+            ],
+        )
+        self.assertEqual(fetch_html.call_count, 2)
+
     def test_fingerprint_collects_gameish_ids_classes_and_iframe_hosts(self):
         html = """
         <div id="exam-panel-wrapper" class="quiz-shell layout">
